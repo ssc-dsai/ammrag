@@ -1,0 +1,77 @@
+retrieve_documents:
+  description: >
+    Search for documents relevant to the question: '{question}'
+
+    Use the vector_search tool with:
+    - query: the user's question (or key search terms extracted from it)
+    - collection_names: {collection_names}
+    - limit: 10
+    - score_threshold: 0.0
+
+    Return ALL results including their full metadata payloads.
+    Pay special attention to any results that contain a 'pg_table_name'
+    field in their metadata — these indicate structured data tables.
+  expected_output: >
+    A list of search results. Each result should include:
+    id, score, content (text), collection_name, and the full metadata
+    dictionary. IMPORTANT: always include the 'uri' field from each
+    result's metadata — this is the real document source link.
+    Clearly flag any results where metadata contains 'pg_table_name'.
+  agent: rag_retriever
+
+analyze_structured_data:
+  description: >
+    Review the vector search results from the previous step.
+
+    1. Scan every result's metadata for a 'pg_table_name' field.
+    2. For each unique pg_table_name found, use the nl2sql tool to
+       query the table with a natural language question related to
+       '{question}'. For example: "Show all data from <table_name>"
+       or "What are the values in <table_name> related to <topic>?"
+    3. Collect all query results alongside the original vector
+       search results.
+
+    If no pg_table_name fields are found in any results, report that
+    no structured data tables were detected and pass through the
+    vector search results unchanged.
+  expected_output: >
+    A combined report containing:
+    - The original vector search results (text content, URIs, scores)
+    - For each structured table found: the table name, its columns,
+      and the SQL query results (columns and rows)
+    - A note if no structured data was detected
+  agent: structured_data_analyst
+  context: [retrieve_documents]
+
+compile_response:
+  description: >
+    Using all gathered information, compile a comprehensive Markdown
+    document that answers the question: '{question}'
+
+    The document MUST include:
+    1. A clear, direct answer to the question based on the evidence
+    2. Supporting details from the vector search results
+    3. ONLY if SQL query results were returned with columns and rows,
+       present that data as Markdown tables. NEVER convert raw text
+       from vector search results into tables — just summarise the text.
+    4. A "Sources" section at the end listing ONLY URIs that appear in
+       the search results (the 'uri' field on each result). NEVER invent
+       or guess URLs — only include URIs copied verbatim from the data.
+       If no URIs are present, omit the Sources section entirely.
+
+    Format the output as a JSON object with these keys:
+    - "text": the full Markdown document
+    - "images": list of any image URIs found in results (empty list if none)
+    - "files": list of any file URIs found in results (empty list if none)
+    - "sources": list of source document URIs found in the metadata only
+  expected_output: >
+    A JSON object with:
+    - "text": a comprehensive Markdown answer with headings. Tables ONLY
+      from SQL query results (never from raw text). A Sources section
+      with ONLY real 'uri' values from the search results (never
+      fabricated links).
+    - "images": list of image URIs (may be empty)
+    - "files": list of file URIs (may be empty)
+    - "sources": list of 'uri' values extracted from search results only
+  agent: response_compiler
+  context: [retrieve_documents, analyze_structured_data]

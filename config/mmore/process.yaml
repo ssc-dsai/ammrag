@@ -1,0 +1,38 @@
+data_path: /workspaces/mmore_qdrant/data/mmore/input/ #put absolute path! Possible to pass a list of folders as well
+google_drive_ids: [] #put ids of google drive folders
+dispatcher_config:
+  output_path: /workspaces/mmore_qdrant/data/results/ #put absolute path or relative to the root of the module
+  use_fast_processors: false
+  distributed: false
+  dashboard_backend_url: http://localhost:8000
+  extract_images: true
+  scheduler_file: null # for instance /path/to/mmore/scheduler-file.json
+  process_batch_sizes:
+    - URLProcessor: 40
+    - DOCXProcessor: 100
+    - PDFProcessor: 4000
+    - MediaProcessor: 40
+    - SpreadsheetProcessor: 100
+    - TXTProcessor: 100
+    - PPTXProcessor: 100
+    - MarkdownProcessor: 100
+    - EMLProcessor: 100
+    - HTMLProcessor: 100
+  processor_config:
+    MediaProcessor:
+      - normal_model: "openai/whisper-large-v3-turbo"
+      - fast_model: "openai/whisper-tiny"
+      - type: "automatic-speech-recognition"
+      - sample_rate: 10
+      - batch_size: 4
+
+    PDFProcessor:
+      - PDFTEXT_CPU_WORKERS: 0
+      - DETECTOR_BATCH_SIZE: 1
+      - DETECTOR_POSTPROCESSING_CPU_WORKERS: 0
+      - RECOGNITION_BATCH_SIZE: 1
+      - OCR_PARALLEL_WORKERS: 0
+      - TEXIFY_BATCH_SIZE: 1
+      - LAYOUT_BATCH_SIZE: 1
+      - ORDER_BATCH_SIZE: 1
+      - TABLE_REC_BATCH_SIZE: 1

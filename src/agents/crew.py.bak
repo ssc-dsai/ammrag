@@ -1,0 +1,260 @@
+import abc
+from typing import Optional
+import config
+from crewai import Agent, Crew, Process, Task, LLM
+from crewai.project import CrewBase, agent, crew, task
+from crewai.memory import EntityMemory, ShortTermMemory
+from crewai.agents.agent_builder.base_agent import BaseAgent
+from typing import List
+import nss_agents.models as models
+import nss_agents.config as config
+from nss_agents.tools.sql_tool import SQLTool
+
+from nss_agents.storage import QdrantStorage
+from nss_agents.tools.qdrant_tool.tool import (
+    QdrantSearchTool,
+)   
+
+# If you want to run a snippet of code before or after the crew starts,
+# you can use the @before_kickoff and @after_kickoff decorators
+# https://docs.crewai.com/concepts/crews#example-crew-class-with-decorators
+
+
+llm=LLM(model=config.ollama_model, base_url=config.ollama_host)
+
+class BaseCrew:
+    """
+    Base class for the crews in the project.
+    Note: Cannot use abc.ABC here as it conflicts with @CrewBase metaclass.
+    """
+
+    def __init__(
+        self,
+        embedder_config: dict,
+        qdrant_location: str,
+        qdrant_api_key: Optional[str] = None,
+    ):
+        self.embedder_config = embedder_config
+        self.qdrant_location = qdrant_location
+        self.qdrant_api_key = qdrant_api_key
+
+    def entity_memory(self) -> EntityMemory:
+        return EntityMemory(
+            storage=QdrantStorage(
+                type="entity-memory",
+                embedder_config=self.embedder_config,
+                qdrant_location=self.qdrant_location,
+                qdrant_api_key=self.qdrant_api_key,
+            ),
+        )
+
+    def short_term_memory(self) -> ShortTermMemory:
+        return ShortTermMemory(
+            storage=QdrantStorage(
+                type="short-term-memory",
+                embedder_config=self.embedder_config,
+                qdrant_location=self.qdrant_location,
+                qdrant_api_key=self.qdrant_api_key,
+            ),
+        )
+
+    def knowledge_base(self) -> QdrantStorage:
+        return QdrantStorage(
+            type="knowledge-base",
+            embedder_config=self.embedder_config,
+            qdrant_location=self.qdrant_location,
+            qdrant_api_key=self.qdrant_api_key,
+        )
+    
+@CrewBase
+class RetrievalCrew(BaseCrew):
+
+    agents_config = "config/retrieval/agents.yaml"
+    tasks_config = "config/retrieval/tasks.yaml"
+
+    @agent
+    def sql_researcher(self) -> Agent:
+        return Agent(
+            config=self.agents_config["sql_researcher"],  # type: ignore[index]    
+            tools=[SQLTool()],
+            verbose=True,
+            llm=llm,
+        )
+    
+    @agent
+    def data_analyst(self) -> Agent:
+        return Agent(
+            config=self.agents_config["data_analyst"],  # type: ignore[index]    
+            tools=[SQLTool()],
+            verbose=True,
+            llm=llm,
+        )
+    
+    @task
+    def find_tables(self) -> Task:
+        # The task description is borrowed from the Anthropic Contextual Retrieval
+        # See: https://www.anthropic.com/news/contextual-retrieval/
+        return Task(
+            config=self.tasks_config["find_tables"],  # type: ignore[index]
+        )
+    
+    @task
+    def query_tables(self) -> Task:
+        # The task description is borrowed from the Anthropic Contextual Retrieval
+        # See: https://www.anthropic.com/news/contextual-retrieval/
+        return Task(
+            config=self.tasks_config["query_tables"],  # type: ignore[index]
+        )
+    
+    @task
+    def synthesize_answer(self) -> Task:
+        # The task description is borrowed from the Anthropic Contextual Retrieval
+        # See: https://www.anthropic.com/news/contextual-retrieval/
+        return Task(
+            config=self.tasks_config["synthesize_answer"],  # type: ignore[index]
+        )
+    
+    @crew
+    def crew(self) -> Crew:
+        """Creates the RetrievalCrew crew"""
+        return Crew(
+            agents=self.agents,  # Automatically created by the @agent decorator
+            tasks=self.tasks,  # Automatically created by the @task decorator
+            process=Process.sequential,
+            memory=True,
+            entity_memory=self.entity_memory(),
+            short_term_memory=self.short_term_memory(),
+            embedder=self.embedder_config,
+            verbose=True,
+        )
+
+
+@CrewBase
+class NssAgents():
+    """NssAgents crew"""
+
+    agents: List[BaseAgent]
+    tasks: List[Task]
+
+    # Learn more about YAML configuration files here:
+    # Agents: https://docs.crewai.com/concepts/agents#yaml-configuration-recommended
+    # Tasks: https://docs.crewai.com/concepts/tasks#yaml-configuration-recommended
+    
+    # If you would like to add tools to your agents, you can learn more about it here:
+    # https://docs.crewai.com/concepts/agents#agent-tools
+    @agent
+    def researcher(self) -> Agent:
+        return Agent(
+            config=self.agents_config['researcher'], # type: ignore[index]
+            verbose=True,
+            llm=llm,
+        )
+    
+    @agent
+    def chunks_extractor(self) -> Agent:
+        return Agent(
+            config=self.agents_config['chunks_extractor'], # type: ignore[index]
+            verbose=True,
+            llm=llm,
+        )
+
+    @agent
+    def reporting_analyst2(self) -> Agent:
+        return Agent(
+            config=self.agents_config['reporting_analyst'], # type: ignore[index]
+            verbose=True,
+            llm=llm,
+        )
+
+    @agent
+    def reporting_analyst(self) -> Agent:
+        return Agent(
+            config=self.agents_config['reporting_analyst'], # type: ignore[index]
+            verbose=True,
+            llm=llm,
+        )
+
+    # To learn more about structured task outputs,
+    # task dependencies, and task callbacks, check out the documentation:
+    # https://docs.crewai.com/concepts/tasks#overview-of-a-task
+    @task
+    def research_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['research_task'], # type: ignore[index]
+        )
+
+    @task
+    def reporting_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['reporting_task'], # type: ignore[index]
+            output_file='report.md'
+        )
+
+    @crew
+    def crew(self) -> Crew:
+        """Creates the NssAgents crew"""
+        # To learn how to add knowledge sources to your crew, check out the documentation:
+        # https://docs.crewai.com/concepts/knowledge#what-is-knowledge
+
+        return Crew(
+            agents=self.agents, # Automatically created by the @agent decorator
+            tasks=self.tasks, # Automatically created by the @task decorator
+            process=Process.sequential,
+            verbose=True,
+            # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
+        )
+    
+@CrewBase
+class KnowledgeOrganizingCrew():
+    """
+    A crew responsible for processing raw text data and converting it into structured knowledge.
+    """
+
+    agents_config = "config/knowledge/agents.yaml"
+    tasks_config = "config/knowledge/tasks.yaml"
+
+    @agent
+    def chunks_extractor(self) -> Agent:
+        return Agent(
+            config=self.agents_config["chunks_extractor"],  # type: ignore[index]
+            verbose=True,
+            llm=llm,
+        )
+
+    @agent
+    def contextualizer(self) -> Agent:
+        return Agent(
+            config=self.agents_config["contextualizer"],  # type: ignore[index]
+            verbose=True,
+            llm=llm,
+        )
+
+    @task
+    def extract_chunks(self) -> Task:
+        return Task(
+            config=self.tasks_config["extract_chunks"],  # type: ignore[index]
+            output_pydantic=models.Chunks,
+        )
+
+    @task
+    def contextualize_chunks(self) -> Task:
+        # The task description is borrowed from the Anthropic Contextual Retrieval
+        # See: https://www.anthropic.com/news/contextual-retrieval/
+        return Task(
+            config=self.tasks_config["contextualize_chunks"],  # type: ignore[index]
+            output_pydantic=models.ContextualizedChunks,
+        )
+
+    @crew
+    def crew(self) -> Crew:
+        """Creates the KnowledgeOrganizingCrew crew"""
+        return Crew(
+            agents=self.agents,  # Automatically created by the @agent decorator
+            tasks=self.tasks,  # Automatically created by the @task decorator
+            process=Process.sequential,
+            memory=True,
+            entity_memory=self.entity_memory(),
+            short_term_memory=self.short_term_memory(),
+            embedder=self.embedder_config,
+            verbose=True,
+        )

@@ -1,0 +1,67 @@
+[project]
+name = "ammrag"
+version = "0.1.0"
+description = "Agentic Multi-modal RAG service"
+authors = [{ name = "mosewell", email = "michael.sewell@ssc-spc.gc.ca" }]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # FastAPI core
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "python-multipart",
+    "python-dotenv",
+    "dotenv",
+    # HTTP client
+    "httpx>=0.27.0",
+    # MCP server
+    "mcp>=1.0.0",
+    # Qdrant & embeddings
+    "qdrant-client[fastembed]",
+    "sentence-transformers",
+    "transformers",
+    # LlamaIndex
+    "llama-index-core",
+    "llama-index-embeddings-huggingface",
+    # LLM
+    "openai",
+    # CrewAI
+    "crewai[tools]",
+    # Database
+    "psycopg2-binary",
+    # Utilities
+    "datasets",
+    "tqdm",
+    "mmore>=1.1.1",
+    "unstructured[all-docs]>=0.18.32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black==24.10.0",
+    "flake8==7.1.1",
+    "mypy==1.13.0",
+]
+test = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[project.scripts]
+agents = "src.agents.main:run"
+run_crew = "src.agents.main:run"
+train = "src.agents.main:train"
+replay = "src.agents.main:replay"
+test = "src.agents.main:test"
+run_with_trigger = "src.agents.main:run_with_trigger"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.crewai]
+type = "crew"

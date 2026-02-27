@@ -1,0 +1,27 @@
+config:
+  catalogs:
+    - name: nss
+      path: http://localhost:8642/
+      vectors:
+        - type: dense
+          embedder: all-MiniLM-L6-v2
+          tokenizer: sentence-transformers/all-MiniLM-L6-v2
+          distance: cosine
+        - type: sparse
+          model: Qdrant/Splade_PP_en_v1
+      # metadata:
+      #   image: false
+      #   structured: false
+      #   location: none
+
+  doctypes:
+    - name: text
+    - name: pdf
+    - name: image
+    - name: html
+
+
+# | **Text Documents** | DOCX, MD, PPTX, XLSX, TXT, EML           | CPU                      | :x:
+# | **PDFs**           | PDF                                     | GPU/CPU                  | :white_check_mark:
+# | **Media Files**    | MP4, MOV, AVI, MKV, MP3, WAV, AAC       | GPU/CPU                  | :white_check_mark:
+# | **Web Content**    | HTML                                    | CPU                      | :x:

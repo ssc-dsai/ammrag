@@ -1,0 +1,98 @@
+query_decomposition_task:
+  description: >
+    The user has asked: "{query}"
+
+    Your job is to:
+    1. Determine if there are multiple questions or units of work that need to be adddressed.
+       If there is only one question, proceed with with the original question. VERY IMPORTANT:
+       Only divide existing information, DO NOT INFER ANY DEFINITION OR CONTEXT.
+    2. If there are multiple units of work, divide them into sub-queries (one per distinct
+       piece of information needed to fully answer the question).
+    3. Return a structured summary that includes:
+       - The original query
+       - Each sub-query
+
+    If the question is simple and needs only one search, a single sub-query is fine.
+    Prefer more focused sub-queries over a single broad one.
+  expected_output: >
+    A structured JSON containing:
+    - The original query
+    - Each sub-query
+  agent: question_expert
+
+query_retrieval_task:
+  context:
+    - query_decomposition_task
+  description: >
+    For each subquery in the received context, use the qdrant_search tool to find the associated
+    vectors. 
+  expected_output: >
+    A structured JSON formatted report containing:
+    - Each sub-query vector response, including all payloads
+  agent: question_expert
+
+
+context_gathering_task:
+  context:
+    - query_retrieval_task
+  description: >
+    You will receive the retrieved chunks produced by the question expert for the
+    query: "{query}"
+
+    For each sub-question and its associated retrieved chunks, work through the
+    following loop:
+
+    1. Read the chunk text and judge whether it is sufficient to answer the
+       sub-question on its own.
+    2. If INSUFFICIENT — call qdrant_get_neighbors with the chunk's point_id to
+       fetch the two chunks before it and the two chunks after it in document order.
+       Re-evaluate with the expanded text.
+    3. If still INSUFFICIENT — call qdrant_get_document with the same point_id
+       to retrieve the entire source document. Re-evaluate.
+    4. If sufficient at any step, record the context and move on to the next chunk
+       or sub-question.
+    5. If a document is genuinely unhelpful after step 3, move on to the next
+       retrieved chunk for that sub-question and repeat from step 1.
+
+    Do this for every sub-question until either:
+    - You have gathered sufficient context for all sub-questions, OR
+    - You have exhausted all retrieved chunks for a sub-question (in which case,
+      note that the information could not be found).
+
+    Compile all gathered context into a clean report organised by sub-question.
+
+  expected_output: >
+    A comprehensive context report organised by sub-question, where each section
+    contains the full text gathered (from chunks, neighbors, or full documents),
+    the source document URL/path for each piece of text, and a brief note on
+    whether sufficient context was found. Include point_ids so sources can be
+    traced.
+
+  agent: context_specialist
+
+answer_synthesis_task:
+  context:
+    - context_gathering_task
+  description: >
+    Using the context report produced by the context specialist, write a complete
+    answer to the user's original question: "{query}"
+
+    Requirements:
+    1. Answer every aspect of the original question directly and clearly.
+    2. For every factual claim, cite the source document. Format citations as
+       inline references like [Source: <document URL or path>] immediately after
+       the relevant sentence or paragraph.
+    3. If some aspects of the question could not be answered due to missing
+       information, state that explicitly rather than guessing.
+    4. At the end of your response, include a "Sources" section that lists all
+       referenced document URLs/paths as a numbered list.
+    5. Write in clear, well-structured prose (use headers and bullet points where
+       appropriate).
+  expected_output: >
+    A well-structured, comprehensive answer to the user's query that:
+    - Directly addresses each aspect of the question
+    - Contains inline source citations ([Source: <URL or path>]) for every claim
+    - Ends with a numbered "Sources" list of all documents referenced
+    - Clearly notes any parts of the question that could not be answered from the
+      available documents
+  agent: answer_synthesizer
