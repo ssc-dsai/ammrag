@@ -247,33 +247,47 @@ class OllamaService:
             model, request_timeout,
         )
 
-        try:
-            response = await self._client(request_timeout).chat(
-                model=model,
-                messages=[{"role": "user", "content": prompt_cfg["prompt"]}],
-                format=ParsedTableList.model_json_schema(),
-                keep_alive=0,
-            )
-        except (httpx.ConnectError, ConnectionError):
-            logger.error("Cannot connect to Ollama server at %s", self.base_url)
-            raise HTTPException(
-                status_code=503,
-                detail=f"Cannot connect to Ollama server at {self.base_url}.",
-            )
-        except httpx.TimeoutException:
-            raise HTTPException(
-                status_code=504,
-                detail=f"Ollama timed out after {request_timeout}s (model={model})",
-            )
-        except ollama.ResponseError as e:
-            raise HTTPException(
-                status_code=e.status_code if e.status_code > 0 else 500,
-                detail=f"Ollama API error: {e.error}",
-            )
-
-        result = ParsedTableList.model_validate_json(response.message.content)
-        logger.info("parse_csv_tables: %d table(s) extracted", len(result.tables))
-        return result.tables
+        attempts = self.retries + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                response = await self._client(request_timeout).chat(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt_cfg["prompt"]}],
+                    format=ParsedTableList.model_json_schema(),
+                    keep_alive=0,
+                )
+                result = ParsedTableList.model_validate_json(response.message.content)
+                logger.info("parse_csv_tables: %d table(s) extracted", len(result.tables))
+                return result.tables
+            except (httpx.ConnectError, ConnectionError):
+                logger.error("Cannot connect to Ollama server at %s", self.base_url)
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Cannot connect to Ollama server at {self.base_url}.",
+                )
+            except httpx.TimeoutException:
+                if attempt <= self.retries:
+                    logger.warning(
+                        "parse_csv_tables timed out (attempt %d/%d), retrying",
+                        attempt, attempts,
+                    )
+                    continue
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"Ollama timed out after {request_timeout}s (model={model})",
+                )
+            except ollama.ResponseError as e:
+                if attempt <= self.retries:
+                    logger.warning(
+                        "parse_csv_tables Ollama error (attempt %d/%d): %s, retrying",
+                        attempt, attempts, e.error,
+                    )
+                    continue
+                raise HTTPException(
+                    status_code=e.status_code if e.status_code > 0 else 500,
+                    detail=f"Ollama API error: {e.error}",
+                )
+        raise HTTPException(status_code=500, detail="parse_csv_tables failed after retries")
 
 
 def _load_prompts() -> dict:

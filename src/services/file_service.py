@@ -164,7 +164,10 @@ class FileService:
                             with open(csv_path) as f:
                                 csv_data = f.read()
                             all_csv_parts.append(csv_data)
-                            all_table_ids.extend(await postgres_service.add_structured(file_id=uri, csv_data=csv_data))
+                            try:
+                                all_table_ids.extend(await postgres_service.add_structured(file_id=uri, csv_data=csv_data))
+                            except Exception:
+                                logger.warning("Failed to parse CSV for sheet '%s' in '%s', skipping", csv_path, uri)
 
                     file_payload = FilePayload(
                         text=sample.text,

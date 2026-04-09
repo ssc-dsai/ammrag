@@ -35,7 +35,43 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
-  fileshare: 
+  ammrag:
+    build: .
+    container_name: ammrag
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: supersecret
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    networks:
+      mynet:
+        aliases:
+          - ammrag
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  fileshare:
     build: utils/fileshare/.
     ports:
       - "8642:8642"
