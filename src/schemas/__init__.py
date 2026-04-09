@@ -5,7 +5,6 @@ Pydantic schemas for data validation
 from .file_schemas import (
     ImportResponse,
     BatchImportResponse,
-    RetrieveResponse,
     HealthResponse,
     ErrorResponse
 )
@@ -13,7 +12,6 @@ from .file_schemas import (
 __all__ = [
     "ImportResponse",
     "BatchImportResponse",
-    "RetrieveResponse",
     "HealthResponse",
     "ErrorResponse"
 ]

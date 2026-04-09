@@ -69,3 +69,6 @@ Thumbs.db
 .DS_Store
 
 .ignore/
+/data
+.devcontainer/
+logs/

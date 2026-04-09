@@ -1,0 +1,12 @@
+summarize_task:
+  description: >
+    Summarize the following document text. It is not necessary to include all
+    facts and values, just a general overview of what the file contains.
+
+    Document text:
+    {text}
+  expected_output: >
+    A thorough summary of the document that covers significant points,
+    written in clear prose. The summary should be detailed enough to stand
+    in for the original document for the purposes of understanding its content.
+  agent: summarizer

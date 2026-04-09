@@ -1,0 +1,21 @@
+query_decomposition_task:
+  description: >
+    The user has asked: "{query}"
+
+    Your job is to:
+    1. Determine if there are multiple questions or units of work that need to be adddressed.
+       If there is only one question, proceed with with the original question. VERY IMPORTANT:
+       Only divide existing information, DO NOT INFER ANY DEFINITION OR CONTEXT.
+    2. If there are multiple units of work, divide them into sub-queries (one per distinct
+       piece of information needed to fully answer the question).
+    3. Return a structured summary that includes:
+       - The original query
+       - Each sub-query
+
+    If the question is simple and needs only one search, a single sub-query is fine.
+    Prefer more focused sub-queries over a single broad one.
+  expected_output: >
+    A structured JSON containing:
+    - The original query
+    - Each sub-query
+  agent: query_expert

@@ -1,0 +1,55 @@
+vector_retrieval_task:
+  description: >
+    Search the Qdrant vector database for chunks relevant to the query: "{query}"
+
+    Use the qdrant_search tool to retrieve the most relevant document chunks.
+
+    Compile all results into a VectorResult with:
+    - text: the combined text of all retrieved chunks, joined by newlines
+    - payload: a dict with a "results" key containing the list of raw search metadata
+      for each chunk (point_id, score, uri, chunk_id, file_id, chunk_total)
+  expected_output: >
+    A VectorResult where text contains all retrieved chunk texts concatenated and
+    payload contains a "results" list with metadata (point_id, score, uri, chunk_id,
+    file_id, chunk_total) for each retrieved chunk.
+  agent: vector_retrieval_specialist
+
+context_gathering_task:
+  context:
+    - vector_retrieval_task
+  description: >
+    You will receive the retrieved chunks produced by the question expert for the
+    query: "{query}"
+
+    For each sub-question and its associated retrieved chunks, work through the
+    following loop:
+
+    1. Read the chunk text and judge whether it is sufficient to answer the
+       sub-question on its own.
+    2. If INSUFFICIENT — call qdrant_get_neighbors with the chunk's point_id to
+       fetch the two chunks before it and the two chunks after it in document order.
+       Re-evaluate with the expanded text.
+    3. If still INSUFFICIENT — call qdrant_get_document with the same point_id
+       to retrieve the entire source document. Re-evaluate.
+    4. If sufficient at any step, record the context and move on to the next chunk
+       or sub-question.
+    5. If a document is genuinely unhelpful after step 3, move on to the next
+       retrieved chunk for that sub-question and repeat from step 1.
+
+    Do this for every sub-question until either:
+    - You have gathered sufficient context for all sub-questions, OR
+    - You have exhausted all retrieved chunks for a sub-question (in which case,
+      note that the information could not be found).
+
+    Compile all gathered context into a clean report organised by sub-question.
+
+  expected_output: >
+    A comprehensive context report organised by sub-question, where each section
+    contains the full text gathered (from chunks, neighbors, or full documents),
+    the source document URL/path for each piece of text, and a brief note on
+    whether sufficient context was found. Include point_ids so sources can be
+    traced.
+
+  agent: context_specialist
+
+

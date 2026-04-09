@@ -22,7 +22,7 @@ from mmore.process.processors.base import AutoProcessor, ProcessorConfig
 from mmore.process.crawler import FileDescriptor, URLDescriptor
 from mmore.type import MultimodalSample
 
-from src.services.ollama_service import ollama_service
+from src.services.ollama_service import ollama_service, get_prompt_config
 
 logger = logging.getLogger(__name__)
 
@@ -192,8 +192,8 @@ class MmoreService:
 
         ext = (descriptor.file_extension or '').lower()
 
-        if ext in XLSX_EXTENSIONS:
-            return self._process_xlsx(descriptor.file_path)
+        # if ext in XLSX_EXTENSIONS:
+        #     return self._process_xlsx(descriptor.file_path)
 
         processor_class = AutoProcessor.from_file(descriptor)
 
@@ -208,6 +208,27 @@ class MmoreService:
         config = self._make_config(output_path)
         processor = processor_class(config=config)
         return [processor.process(descriptor.file_path)]
+
+    def export_xlsx_sheet_csvs(self, file_path: str, tmp_dir: str) -> list[tuple[str, str]]:
+        """Export each sheet of an xlsx file as a CSV in tmp_dir.
+
+        Returns:
+            List of (sheet_name, csv_path) tuples, one per non-empty sheet.
+        """
+        xl = pd.ExcelFile(file_path)
+        results: list[tuple[str, str]] = []
+        for sheet_name in xl.sheet_names:
+            df = xl.parse(sheet_name, header=None)
+            df = _clean_dataframe(df)
+            if df.empty:
+                logger.info("Skipping empty sheet '%s' in '%s'", sheet_name, file_path)
+                continue
+            safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in sheet_name)
+            csv_path = os.path.join(tmp_dir, f"{safe_name}.csv")
+            df.to_csv(csv_path, index=False)
+            results.append((sheet_name, csv_path))
+            logger.info("Exported sheet '%s' → '%s'", sheet_name, csv_path)
+        return results
 
     def _process_xlsx(self, file_path: str) -> list[MultimodalSample]:
         """
@@ -267,11 +288,10 @@ class MmoreService:
             image_b64 = base64.b64encode(f.read()).decode('utf-8')
 
         response = await ollama_service.generate(
-            prompt="You are a technical writer. Describe this image in full detail, and try to inumerate all the objects, people, text, and other elements in the image. Be as descriptive as possible. If it is a map, describe all the rooms in the map, and their labels. If there is text in the image, transcribe it exactly as it appears.",
+            **get_prompt_config("describe_image"),
             images=[image_b64],
-            temperature=0.3,
         )
-        return response.get("response", "")
+        return response.response
 
 
 # Global service instance

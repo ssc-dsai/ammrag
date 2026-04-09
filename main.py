@@ -4,19 +4,28 @@ Main FastAPI application entry point
 Note: Use start_services.py to launch both FastAPI and MCP server together
 """
 
+from src.core.logging_config import setup_logging
+
+setup_logging()
+
 import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
-
+import shutil
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
 from src.routes import api_router
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.temp_file_path:
+        shutil.rmtree(settings.temp_file_path, ignore_errors=True)
+        logger.info("Cleared temp directory: %s", settings.temp_file_path)
+    yield
 
 
 def create_app() -> FastAPI:
@@ -31,6 +40,7 @@ def create_app() -> FastAPI:
         description=settings.app_description,
         version=settings.app_version,
         debug=settings.debug,
+        lifespan=lifespan,
     )
 
     # Configure CORS

@@ -1,52 +1,4 @@
 services:
-      
-  # mongo:
-  #   container_name: mongo
-  #   image: mongo:latest
-  #   # ports:
-  #   #   - "27017:27017"
-
-  crewai:
-    container_name: crewai
-    build:
-      context: ./crewai/.
-    volumes:
-      - ./crewai/:/app/
-    ports:
-      - "5006:5006"
-    command: bash
-    tty: true
-
-  # mmore:
-  #   container_name: mmore
-  #   build: 
-  #     context: 
-  #       https://github.com/swiss-ai/mmore.git
-  #     args:
-  #       USER_UID: 1000
-  #       USER_GID: 1000 
-  #   volumes:
-  #     - ./home/mosewell/canchat-v2-nss/nss/mmore:/app/config/
-  #     - /home/mosewell/canchat-v2-nss/nss/data/mmore/:/data/
-  #   ports:
-  #     - "8640:8000"
-  #   # environment:
-  #   #   - MONGODB_URL="mongodb://mongo:27017"
-  #   tty: true
-
-  # mmore:
-  #   container_name: mmore
-  #   build: 
-  #     context: ./mmore/mmore_qdrant/.
-  #     args:
-  #       USER_UID: 1000
-  #       USER_GID: 1000 
-  #   volumes:
-  #     - ./mmore/:/app/config/
-  #     - ./data/mmore/:/data/
-  #   ports:
-  #     - "8000:8000"
-  #   tty: true
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -70,6 +22,9 @@ services:
           - driver: nvidia
             capabilities: ["gpu"]
             count: all
+    environment:
+      OLLAMA_CONTEXT_LENGTH: 8192
+      # OLLAMA_DEBUG: 2
     healthcheck:
       test:  [ "CMD-SHELL", "bash", "-c", "{ printf >&3 'GET / HTTP/1.0\\r\\n\\r\\n'; cat <&3; } 3<>/dev/tcp/localhost/11434 | grep 'Ollama is' || exit 1"  ]
       interval: 60s
@@ -80,21 +35,18 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
-  # frontend:
-  #   build:
-  #     context: ..
-  #     dockerfile: nss/components/frontend/Dockerfile
-  #   ports:
-  #     - "5173:5173"
-  #   command: bash
-  #   tty: true
-
   fileshare: 
     build: utils/fileshare/.
     ports:
       - "8642:8642"
     volumes:
-      - /home/mosewell/canchat-v2-nss/nss/data/mmore/input:/app/pub:ro
+      - ./data/mmore/input:/app/pub:ro
+    restart: unless-stopped
+    networks:
+      mynet:
+        aliases:
+          - fileserve
+
       
   postgres:
     image: postgres:16
@@ -113,35 +65,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    
-  # portainer:
-  #   image: portainer/portainer-ce:lts
-  #   container_name: portainer
-  #   ports:
-  #     - "8000:8000"
-  #     - "9443:9443"
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #     - portainer_data:/data  
-  #   restart: unless-stopped
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    # user: "5050:5050"
-    container_name: pgadmin
-    restart: unless-stopped
-    depends_on:
-      - postgres
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: adminpassword
-    ports:
-      - "8282:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
 
 volumes:
     ollama:    
     postgres_data:
-    pgadmin_data:
-    portainer_data:
+
+networks:
+  mynet:
+    external: true

@@ -4,18 +4,16 @@ PostgreSQL metadata search service for FastAPI
 Handles structured metadata queries against PostgreSQL tables.
 """
 
-import csv
-import io
 import logging
 import re
 import uuid as uuid_lib
-from datetime import datetime
 from typing import Optional, Dict, Any, List
 import psycopg2
 from psycopg2 import sql
 from fastapi import HTTPException
 
 from src.core import settings
+from src.models.ollama_models import ParsedTable
 
 
 logger = logging.getLogger(__name__)
@@ -63,10 +61,7 @@ class PostgresService:
 
 
     def _ensure_tables(self) -> None:
-        """
-        Verify PostgreSQL connectivity and ensure required tables exist.
-        Tables: catalog (id, name, path), files (id, catalog_id, uuid, uri, type, last_modified_datetime, processed)
-        """
+        """Verify PostgreSQL connectivity and ensure the structured table exists."""
         try:
             conn = self._get_connection()
         except Exception as e:
@@ -78,43 +73,10 @@ class PostgresService:
 
         try:
             with conn.cursor() as cur:
-                # Create catalog table
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS catalogs (
-                        id SERIAL PRIMARY KEY,
-                        name VARCHAR(255) UNIQUE NOT NULL,
-                        path TEXT NOT NULL
-                    )
-                """)
-
-                # Create collections table with foreign key to catalog
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS collections (
-                        id SERIAL PRIMARY KEY,
-                        catalog_id INTEGER REFERENCES catalogs(id) ON DELETE CASCADE,
-                        name TEXT NOT NULL
-                    )
-                """)
-
-                # Create files table with foreign key to catalog
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS files (
-                        id SERIAL PRIMARY KEY,
-                        catalog_id INTEGER REFERENCES catalogs(id) ON DELETE CASCADE,
-                        uuid UUID NOT NULL DEFAULT gen_random_uuid(),
-                        uri TEXT NOT NULL,
-                        type VARCHAR(100) NOT NULL,
-                        last_modified_datetime TIMESTAMP NOT NULL,
-                        processed BOOLEAN NOT NULL DEFAULT FALSE,
-                        UNIQUE(catalog_id, uri)
-                    )
-                """)
-
-                # Create structured table with foreign key to files
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS structured (
                         id SERIAL PRIMARY KEY,
-                        file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
+                        file_uuid TEXT NOT NULL,
                         table_name TEXT NOT NULL
                     )
                 """)
@@ -137,238 +99,91 @@ class PostgresService:
                         EXECUTE FUNCTION drop_structured_table();
                 """)
 
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS filelist (
+                        id SERIAL PRIMARY KEY,
+                        root_dir TEXT NOT NULL,
+                        collection_name TEXT NOT NULL,
+                        uri TEXT NOT NULL,
+                        UNIQUE (root_dir, collection_name, uri)
+                    )
+                """)
+
                 conn.commit()
                 logger.info("Database tables verified/created")
         finally:
             conn.close()
 
-    def create_collection(self, catalog_id: int, name: str) -> int:
-        """Create a new collection record for a catalog.
-        Returns {"id": collection_id, "name": collection_name}.
-        """
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO collections (catalog_id, name)
-                    VALUES (%s, %s)
-                    RETURNING id
-                    """,
-                    (catalog_id, name),
-                )
-                collection_id = cur.fetchone()[0]
-                conn.commit()
-                return collection_id
-        finally:
-            conn.close()
-
-    def add_catalog(self, name: str, path: str) -> int:
-        """
-        Add a catalog to the database, or return the existing id if it already exists.
-
-        Args:
-            name: The name of the catalog
-            path: The path of the catalog
-
-        Returns:
-            The catalog id
-        """
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO catalogs (name, path)
-                    VALUES (%s, %s)
-                    ON CONFLICT (name) DO UPDATE SET path = EXCLUDED.path
-                    RETURNING id
-                    """,
-                    (name, path)
-                )
-                row = cur.fetchone()
-                conn.commit()
-                assert row is not None
-                return row[0]
-        finally:
-            conn.close()
-
-
-    def get_catalogs(self, id: Optional[int] = None, name: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Return catalogs, optionally filtered by id and/or name."""
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                query = "SELECT id, name, path FROM catalogs"
-                conditions: list[str] = []
-                params: list = []
-                if id is not None:
-                    conditions.append("id = %s")
-                    params.append(id)
-                if name is not None:
-                    conditions.append("name = %s")
-                    params.append(name)
-                if conditions:
-                    query += " WHERE " + " AND ".join(conditions)
-                query += " ORDER BY id"
-                cur.execute(query, params)
-                return [
-                    {"id": row[0], "name": row[1], "path": row[2]}
-                    for row in cur.fetchall()
-                ]
-        finally:
-            conn.close()
-
-    def get_collections(
-        self, id: Optional[int] = None, catalog_id: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """Return collections, optionally filtered by id and/or catalog_id."""
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                query = "SELECT id, catalog_id, name FROM collections"
-                conditions: list[str] = []
-                params: list = []
-                if id is not None:
-                    conditions.append("id = %s")
-                    params.append(id)
-                if catalog_id is not None:
-                    conditions.append("catalog_id = %s")
-                    params.append(catalog_id)
-                if conditions:
-                    query += " WHERE " + " AND ".join(conditions)
-                query += " ORDER BY id"
-                cur.execute(query, params)
-                return [
-                    {"id": row[0], "catalog_id": row[1], "name": row[2]}
-                    for row in cur.fetchall()
-                ]
-        finally:
-            conn.close()
-
-    def get_file(self, catalog_id: Optional[int], uri: str) -> Optional[Dict[str, Any]]:
-        """Return a file row matching (catalog_id, uri), or None."""
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, last_modified_datetime FROM files WHERE catalog_id = %s AND uri = %s",
-                    (catalog_id, uri),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    return None
-                return {"id": row[0], "last_modified": row[1]}
-        finally:
-            conn.close()
-
-    def update_file_timestamp(self, file_id: int, last_modified: datetime) -> None:
-        """Update the last_modified_datetime for an existing file."""
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE files SET last_modified_datetime = %s WHERE id = %s",
-                    (last_modified, file_id),
-                )
-                conn.commit()
-        finally:
-            conn.close()
-
-    def add_file(
-        self,
-        catalog_id: Optional[int],
-        uri: str,
-        file_type: str,
-        last_modified: datetime,
-        processed: bool = False,
-    ) -> Optional[int]:
-        """
-        Add a file to the database.
-
-        Args:
-            catalog_id: The id of the catalog (None for standalone imports)
-            uri: The URI path of the file
-            file_type: The type/mime of the file
-            last_modified: The last modified timestamp
-            processed: Whether the file has been processed
-
-        Returns:
-            The file id if created, None if the file already exists
-        """
-        conn = self._get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO files (catalog_id, uri, type, last_modified_datetime, processed)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (catalog_id, uri) DO NOTHING
-                    RETURNING id
-                    """,
-                    (catalog_id, uri, file_type, last_modified, processed),
-                )
-                result = cur.fetchone()
-                conn.commit()
-                return result[0] if result else None
-        finally:
-            conn.close()
-
-
-    async def add_structured(self, file_id: int, csv_data: str, table_name: str | None = None) -> str:
-        """
-        Create a PostgreSQL table from CSV data and register it in the structured table.
-
-        Args:
-            file_id: The id of the file in the files table
-            csv_data: Raw CSV string (first row is headers)
-            table_name: Optional explicit table name; auto-generated if not provided
-
-        Returns:
-            The table name
-        """
-        if table_name is None:
-            uid = uuid_lib.uuid4().hex[:12]
-            table_name = f"file_{file_id}_{uid}"
-
-        reader = csv.reader(io.StringIO(csv_data))
-        headers = [re.sub(r"\W+", "_", h.strip().lower()) for h in next(reader)]
-        rows = list(reader)
+    def _insert_parsed_table(self, parsed: ParsedTable, file_id: str) -> str:
+        """Insert a single ParsedTable into Postgres. Returns the generated UUID table name."""
+        table_id = uuid_lib.uuid4().hex
+        headers = [re.sub(r"\W+", "_", h.strip().lower()) for h in parsed.headers]
+        rows = parsed.rows
 
         conn = self._get_connection()
         try:
             with conn.cursor() as cur:
-                # Build CREATE TABLE with all TEXT columns
                 cols = sql.SQL(", ").join(
                     sql.SQL("{} TEXT").format(sql.Identifier(h)) for h in headers
                 )
                 cur.execute(sql.SQL("CREATE TABLE {} ({})").format(
-                    sql.Identifier(table_name), cols
+                    sql.Identifier(table_id), cols
                 ))
 
-                # Insert rows
                 if rows:
-                    placeholders = sql.SQL(", ").join(sql.Placeholder() * len(headers))
+                    n = len(headers)
+                    padded = [tuple((row + [""] * n)[:n]) for row in rows]
+                    placeholders = sql.SQL(", ").join([sql.Placeholder()] * n)
                     insert = sql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
-                        sql.Identifier(table_name),
+                        sql.Identifier(table_id),
                         sql.SQL(", ").join(sql.Identifier(h) for h in headers),
                         placeholders,
                     )
-                    cur.executemany(insert, rows)
+                    cur.executemany(insert.as_string(cur), padded)
 
-                # Register in structured table
                 cur.execute(
-                    "INSERT INTO structured (file_id, table_name) VALUES (%s, %s)",
-                    (file_id, table_name),
+                    "INSERT INTO structured (file_uuid, table_name) VALUES (%s, %s)",
+                    (file_id, table_id),
                 )
-
                 conn.commit()
-                return table_name
+                return table_id
         except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
+
+    async def add_structured(self, file_id: str, csv_data: str) -> list[str]:
+        """
+        Parse a raw CSV with Ollama and store each resulting table in Postgres
+        with a UUID table name.
+
+        Returns:
+            List of UUID table names created (one per parsed sub-table),
+            or an empty list if tables already exist for this file.
+        """
+        from src.services.ollama_service import ollama_service  # local import avoids circular
+
+        # Skip if structured tables already exist for this file
+        # conn = self._get_connection()
+        # try:
+        #     with conn.cursor() as cur:
+        #         cur.execute("SELECT 1 FROM structured WHERE file_uuid = %s", (file_id,))
+        #         if cur.fetchone():
+        #             logger.info("Structured tables already exist for '%s' — skipping", file_id)
+        #             return []
+        # finally:
+        #     conn.close()
+
+        parsed_tables = await ollama_service.parse_csv_tables(csv_data)
+
+        table_ids: list[str] = []
+        for parsed in parsed_tables:
+            table_id = self._insert_parsed_table(parsed, file_id)
+            table_ids.append(table_id)
+            logger.info("Stored structured table '%s' (title: %s)", table_id, parsed.title)
+
+        return table_ids
 
 
     async def search_metadata(
@@ -497,31 +312,91 @@ class PostgresService:
         finally:
             conn.close()
 
-    def get_structured_tables(self, file_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
+    def get_structured_tables(self, file_uuids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
-        Get structured table registrations, optionally filtered by file IDs.
+        Get structured table registrations, optionally filtered by file UUIDs.
 
         Args:
-            file_ids: Optional list of file IDs to filter by
+            file_uuids: Optional list of file UUIDs to filter by
 
         Returns:
-            List of dicts with keys: id, file_id, table_name
+            List of dicts with keys: id, file_uuid, table_name
         """
         conn = self._get_connection()
         try:
             with conn.cursor() as cur:
-                if file_ids:
-                    placeholders = ", ".join(["%s"] * len(file_ids))
+                if file_uuids:
+                    placeholders = ", ".join(["%s"] * len(file_uuids))
                     cur.execute(
-                        f"SELECT id, file_id, table_name FROM structured WHERE file_id IN ({placeholders}) ORDER BY id",
-                        file_ids,
+                        f"SELECT id, file_uuid, table_name FROM structured WHERE file_uuid IN ({placeholders}) ORDER BY id",
+                        file_uuids,
                     )
                 else:
-                    cur.execute("SELECT id, file_id, table_name FROM structured ORDER BY id")
+                    cur.execute("SELECT id, file_uuid, table_name FROM structured ORDER BY id")
                 return [
-                    {"id": row[0], "file_id": row[1], "table_name": row[2]}
+                    {"id": row[0], "file_uuid": row[1], "table_name": row[2]}
                     for row in cur.fetchall()
                 ]
+        finally:
+            conn.close()
+
+    def delete_structured_by_file_id(self, file_id: str) -> int:
+        """Delete all structured table registrations for a file, cascading to drop the dynamic tables.
+
+        The DB trigger drop_structured_table fires BEFORE DELETE on the structured
+        registry and drops each dynamic table automatically.
+
+        Returns:
+            Number of rows deleted from the structured registry.
+        """
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM structured WHERE file_uuid = %s", (file_id,))
+                count = cur.rowcount
+                conn.commit()
+                if count:
+                    logger.info("Deleted %d structured table(s) for file '%s'", count, file_id)
+                return count
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=f"PostgreSQL error: {str(e)}")
+        finally:
+            conn.close()
+
+    def get_filelist(self, root_dir: str, collection_name: str) -> List[str]:
+        """Return the stored URI list for a root_dir/collection pair, or [] if none exists."""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT uri FROM filelist WHERE root_dir = %s AND collection_name = %s ORDER BY uri",
+                    (root_dir, collection_name),
+                )
+                return [row[0] for row in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def set_filelist(self, root_dir: str, collection_name: str, uris: List[str]) -> None:
+        """Replace the stored URI list for a root_dir/collection pair."""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM filelist WHERE root_dir = %s AND collection_name = %s",
+                    (root_dir, collection_name),
+                )
+                if uris:
+                    cur.executemany(
+                        "INSERT INTO filelist (root_dir, collection_name, uri) VALUES (%s, %s, %s) "
+                        "ON CONFLICT DO NOTHING",
+                        [(root_dir, collection_name, uri) for uri in uris],
+                    )
+                conn.commit()
+                logger.info("Updated filelist for '%s' (%s): %d file(s)", root_dir, collection_name, len(uris))
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=f"PostgreSQL error: {str(e)}")
         finally:
             conn.close()
 

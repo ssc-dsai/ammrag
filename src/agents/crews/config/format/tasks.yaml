@@ -1,0 +1,34 @@
+answer_synthesis_task:
+  description: >
+    Using the retrieved document chunks in "{vectors}", write a structured answer
+    to the user's original question: "{query}".
+
+    For every distinct aspect needed to fully answer the question, produce one entry
+    containing:
+      - discussion: a concise explanation of how this aspect answers part of the question
+      - quote: a verbatim or near-verbatim excerpt from the source document that
+               directly supports this aspect
+      - source: the URI or file path of the document the quote came from
+                (found in the "uri" field of each vector payload)
+
+    Rules:
+    - Use only information present in the provided vectors. Do not fabricate.
+    - If an aspect of the question cannot be answered from the available documents,
+      include an entry with discussion explaining the gap, an empty quote (""),
+      and source set to "not found".
+    - Each aspect must map to a different part of the question or a different
+      supporting document. Do not duplicate aspects.
+  expected_output: >
+    A JSON object with a single key "aspects" whose value is a list of objects.
+    Each object has exactly three string fields: "discussion", "quote", "source".
+    Example:
+    {
+      "aspects": [
+        {
+          "discussion": "The policy was updated in 2023 to require annual reviews.",
+          "quote": "All departmental policies must be reviewed on an annual basis effective January 2023.",
+          "source": "https://example.com/docs/policy-update-2023.pdf"
+        }
+      ]
+    }
+  agent: answer_synthesizer

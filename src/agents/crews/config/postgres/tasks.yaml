@@ -1,0 +1,45 @@
+---
+inspect_database_schema:
+  description: >
+    Use the PostgreSQL Schema Inspector tool to examine the database and
+    retrieve comprehensive information about the tables relevant to the user's
+    question. If specific table names are provided ({table_names}), filter to
+    those tables. This schema information will be used to generate an accurate
+    SQL query.
+  expected_output: >
+    A structured overview of the relevant PostgreSQL tables including column
+    names, data types, row counts, and any observations about the data
+    structure that will help formulate the correct SQL query.
+  agent: schema_inspector
+
+generate_sql_query:
+  description: >
+    Based on the database schema information and the user's question
+    ({user_query}), develop an optimized PostgreSQL SQL query. Analyze the
+    schema to identify the correct tables and columns, determine appropriate
+    joins or aggregations needed, and write a syntactically correct query that
+    will accurately retrieve the requested information. Output only the SQL
+    query and a brief explanation.
+  expected_output: >
+    A complete and executable PostgreSQL SQL query that answers the user's
+    question, along with a brief explanation of the query logic, which tables
+    are being queried, and what results to expect.
+  agent: sql_query_developer
+  context:
+    - inspect_database_schema
+
+execute_query_and_respond:
+  description: >
+    Extract the SQL query from the previous task output and execute it against
+    the PostgreSQL database using the PostgreSQL Query Executor tool. Retrieve
+    the results and compose a comprehensive response that directly answers the
+    user's question ({user_query}). Present the data clearly and interpret the
+    results in the context of the original question.
+  expected_output: >
+    A complete response to the user's question including the query results
+    presented in a clear format, key findings and insights from the data, and
+    a direct answer to the question asked. If no results are found, explain
+    why and suggest alternative approaches.
+  agent: query_executor
+  context:
+    - generate_sql_query

@@ -1,0 +1,14 @@
+condense_task:
+  description: >
+    Condense the following summary so that it fits within {token_length} tokens
+    (approximately {word_limit} words). Keep the most important facts and
+    concepts. Write in clear, dense prose — no bullet points, no headers,
+    no padding. Output only the condensed text, nothing else.
+
+    Summary to condense:
+    {summary}
+  expected_output: >
+    A condensed version of the summary in plain prose that does not exceed
+    {token_length} tokens. The text must be self-contained and capture the
+    essential meaning of the original document.
+  agent: condenser

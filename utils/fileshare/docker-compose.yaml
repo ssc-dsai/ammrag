@@ -1,0 +1,17 @@
+version: "3.9"
+ 
+services:
+  fileshare: 
+    build: .
+    ports:
+      - "8642:8642"
+    volumes:
+      - ../../data/mmore/input:/app/pub:ro
+    restart: unless-stopped
+    networks:
+      mynet:
+        aliases:
+          - fileshare.local
+
+networks:
+  mynet:

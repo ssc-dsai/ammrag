@@ -9,27 +9,14 @@ from enum import Enum
 import os
 import logging
 import dotenv
+import yaml
 from pathlib import Path
 
 dotenv.load_dotenv()
 
 
-def load_config(config_path: str) -> dict:
-    path = Path(config_path)
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    return data.get("config", {}) if isinstance(data, dict) else {}
-
-
 class Settings(BaseSettings):
     """Application settings"""
-
-    # App Info
-    # app_name: str = "File Import Service"
-    # app_version: str = "1.0.0"
-    # app_description: str = "API for importing files via URIs and retrieving them"
     
     # Server
     host: str = "0.0.0.0"
@@ -66,13 +53,18 @@ class Settings(BaseSettings):
         )
 
     # Qdrant Configuration
-    qdrant_url: str = "http://localhost:6333"
+    qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     qdrant_api_key: Optional[str] = os.getenv("QDRANT_API_KEY", None)
     qdrant_collection_name: str = os.getenv("QDRANT_COLLECTION_NAME", "ammrag")
+    qdrant_vector_name: Optional[str] = os.getenv("QDRANT_VECTOR_NAME", None)
+    qdrant_distance: str = os.getenv("QDRANT_DISTANCE", "cosine")
+    qdrant_timeout: int = int(os.getenv("QDRANT_TIMEOUT", "30"))
 
 
-    # Embedder & Tokenizer Configuration
-    embedder_model: str = os.getenv("EMBEDDER_MODEL", "all-MiniLM-L6-v2")
+    # Embedder Configuration
+    dense_embedder_model: str = os.getenv("DENSE_EMBEDDER_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    dense_embedder_token_length: int = int(os.getenv("DENSE_EMBEDDER_TOKEN_LENGTH", 384))
+    sparse_embedder_model: str = os.getenv("SPARSE_EMBEDDER_MODEL", "Qdrant/Splade_PP_en_v1")
 
     # LLM configuration
     class LLMHost(str, Enum):
@@ -83,31 +75,54 @@ class Settings(BaseSettings):
     # Ollama Configuration
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "gpt-oss:latest")
-    ollama_vision_model: str = os.getenv("OLLAMA_VISION_MODEL", "llava")
     ollama_timeout: int = int(os.getenv("OLLAMA_TIMEOUT", 120))  # seconds
-    ollama_vision_timeout: int = int(os.getenv("OLLAMA_VISION_TIMEOUT", 300))  # seconds
+    ollama_temperature: float = float(os.getenv("OLLAMA_TEMPERATURE", 0.3))
+    ollama_retries: int = int(os.getenv("OLLAMA_RETRIES", 3))
+    ollama_num_ctx: int = int(os.getenv("OLLAMA_NUM_CTX", 8192))
 
     # MCP Server Configuration
     mcp_port: int = 8001
     mcp_enabled: bool = True
-
-    source_path: str = "http://localhost:8642/"
+    mcp_collection_name: Optional[str] = os.getenv("MCP_COLLECTION_NAME", None)
 
     # Temporary file download path (None = system default via tempfile.mkdtemp)
     temp_file_path: Optional[str] = os.getenv("TEMP_FILE_PATH", "./tmp")
 
 
     # Configuration file path
-    config_path: str = os.getenv("CONFIG_PATH", "config/config.yml")
+    config_path: Path = Path(os.getenv("CONFIG_PATH", "config/config.yml"))
+    projects: list[dict] = []
 
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.projects = self.load_projects(self.config_path)
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        extra = "ignore"  # Allow extra environment variables
+    def load_projects(self, config_path: Path) -> list[dict]:
+        """Load project dicts from the YAML config file."""
+        _log = logging.getLogger(__name__)
+        if not config_path.exists():
+            return []
+        try:
+            with config_path.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except Exception as exc:
+            _log.error("Failed to read config file '%s': %s", config_path, exc)
+            return []
+        config = data.get("config", {}) if isinstance(data, dict) else {}
 
-
+        projects = []
+        for i, entry in enumerate(config.get("projects", [])):
+            name = entry.get("name")
+            path = entry.get("path")
+            if not name or not path:
+                _log.warning("Skipping project entry #%d in config: missing 'name' or 'path' (%s)", i, entry)
+                continue
+            projects.append({"name": name, "path": path})
+            _log.info("Loaded project '%s' from config", name)
+        return projects
 
 
 # Create global settings instance
 settings = Settings()
+
+

@@ -1,13 +1,10 @@
 """
-CrewAI service for running agent crews from FastAPI
-
-Calls the QueryRetrievalCrew directly to handle natural language
-queries over the indexed document corpus.
+CrewAI service for running the RAGFlow from FastAPI.
 """
 
 import asyncio
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from fastapi import HTTPException
 
@@ -17,73 +14,47 @@ logger = logging.getLogger(__name__)
 
 
 class CrewService:
-    """Service for running the query retrieval crew."""
+    """Service for running the RAGFlow pipeline."""
 
     async def query(
         self,
         question: str,
-        collection_names: List[str],
+        project_name: str | None = None,
         timeout: int | None = None,
     ) -> Dict[str, Any]:
-        """
-        Run the QueryRetrievalCrew to answer a natural language question.
+        timeout = timeout or settings.ollama_timeout * 3
 
-        The crew pipeline:
-        1. RAG Retriever - vector search across all catalog collections
-        2. Structured Data Analyst - detect and query structured tables
-        3. Response Compiler - compile Markdown response with source URIs
-
-        Args:
-            question: The user's natural language question
-            collection_names: List of Qdrant collection names to search
-            timeout: Maximum execution time in seconds
-
-        Returns:
-            Dict with keys: text, images, files, sources
-
-        Raises:
-            HTTPException: If crew execution fails or times out
-        """
-        timeout = timeout or settings.ollama_timeout
-
-        logger.info("Starting QueryRetrievalCrew for: %s", question[:120])
+        logger.info("=== RAGFlow query started ===")
+        logger.info("Question   : %s", question)
+        logger.info("Project    : %s", project_name or "(default)")
+        logger.info("Timeout    : %ds", timeout)
 
         try:
             result = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self._run_query_sync, question, collection_names
-                ),
+                asyncio.to_thread(self._run_flow_sync, question, project_name),
                 timeout=timeout,
             )
-            logger.info(
-                "QueryRetrievalCrew completed, response length=%d chars",
-                len(result.get("text", "")),
-            )
+            logger.info("=== RAGFlow query completed ===")
+            logger.info("Sources: %s", result.get("sources", []))
             return result
 
         except asyncio.TimeoutError:
-            logger.error("QueryRetrievalCrew timed out after %ds", timeout)
-            raise HTTPException(
-                status_code=504,
-                detail=f"Query crew timed out after {timeout}s",
-            )
+            logger.error("RAGFlow timed out after %ds", timeout)
+            raise HTTPException(status_code=504, detail=f"RAGFlow timed out after {timeout}s")
         except HTTPException:
             raise
         except Exception as e:
-            logger.exception("QueryRetrievalCrew failed")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Query crew error: {str(e)}",
-            )
+            logger.exception("RAGFlow failed: %s", e)
+            raise HTTPException(status_code=500, detail=f"RAGFlow error: {e}")
 
     @staticmethod
-    def _run_query_sync(
-        question: str, collection_names: List[str]
-    ) -> Dict[str, Any]:
-        """Synchronous wrapper - imported lazily to avoid heavy crewai
-        imports at service startup."""
-        from src.agents.retrieval_crew import run_query
-        return run_query(question, collection_names)
+    def _run_flow_sync(question: str, collection_name: str | None = None) -> Dict[str, Any]:
+        """Synchronous wrapper — imported lazily to avoid heavy imports at startup."""
+        from src.agents.flows.rag import RAGFlow
+        result = RAGFlow().kickoff(inputs={"query": question, "collection_name": collection_name})
+        if isinstance(result, dict):
+            return result
+        return {"aspects": [], "sources": [], "images": [], "files": []}
 
 
 # Global service instance

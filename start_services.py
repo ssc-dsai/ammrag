@@ -4,11 +4,14 @@ Unified launcher for AMMRAG services
 Starts both FastAPI and MCP server automatically
 """
 
+import socket
 import subprocess
 import sys
 import time
 import signal
 import os
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 # Track subprocess PIDs for cleanup
@@ -26,6 +29,37 @@ def signal_handler(sig, frame):
             proc.kill()
     print("✅ All services stopped")
     sys.exit(0)
+
+
+def _wait_for_health(url: str, proc: subprocess.Popen, timeout: int = 60, interval: float = 0.5) -> bool:
+    """Poll *url* until HTTP 200 is received, the process dies, or timeout expires."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            return False  # process exited; caller checks stderr
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
+
+
+def _wait_for_port(port: int, proc: subprocess.Popen, timeout: int = 60, interval: float = 0.5) -> bool:
+    """Poll TCP *port* on localhost until it accepts connections, the process dies, or timeout expires."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            return False
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                return True
+        except OSError:
+            pass
+        time.sleep(interval)
+    return False
 
 
 def main():
@@ -46,40 +80,42 @@ def main():
     fastapi_proc = subprocess.Popen(
         [sys.executable, "main.py"],
         cwd=project_root,
-        stdout=subprocess.DEVNULL,  # Suppress output for cleaner display
-        stderr=subprocess.PIPE,
-        text=True
     )
     processes.append(fastapi_proc)
-    time.sleep(3)  # Give FastAPI time to start
 
-    # Check if FastAPI started successfully
-    if fastapi_proc.poll() is not None:
-        stderr_output = fastapi_proc.stderr.read()
-        if "Address already in use" in stderr_output:
-            print("⚠️  FastAPI port already in use - a service may already be running")
-            print("   Continuing anyway... (the existing service will handle requests)")
+    fastapi_port = int(os.getenv("PORT", 8000))
+    health_url = f"http://localhost:{fastapi_port}/health"
+    print(f"   Waiting for health check at {health_url} ...")
+
+    if not _wait_for_health(health_url, fastapi_proc):
+        if fastapi_proc.poll() is not None:
+            print("❌ FastAPI failed to start (see output above)")
+            return 1
         else:
-            print("❌ FastAPI failed to start")
-            print(stderr_output)
+            print("❌ FastAPI health check timed out (60 s) — service may still be starting")
             return 1
 
-    print("✅ FastAPI service: http://localhost:8000")
-    print("📚 API Documentation: http://localhost:8000/docs")
+    print(f"✅ FastAPI service: http://localhost:{fastapi_port}")
+    print(f"📚 API Documentation: http://localhost:{fastapi_port}/docs")
 
     # Start MCP server
     print("🚀 Starting MCP server...")
     mcp_proc = subprocess.Popen(
         [sys.executable, "mcp_server.py"],
         cwd=project_root,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
     )
     processes.append(mcp_proc)
 
-    print("✅ MCP server: Running on stdio transport")
+    mcp_port = int(os.getenv("MCP_PORT", 8001))
+    print(f"   Waiting for MCP server on port {mcp_port} ...")
+
+    if not _wait_for_port(mcp_port, mcp_proc):
+        if mcp_proc.poll() is not None:
+            print("❌ MCP server failed to start")
+        else:
+            print("⚠️  MCP server timed out — it may still be starting")
+
+    print(f"✅ MCP server: http://localhost:{mcp_port}/mcp/")
     print("="*60)
     print("\n📝 Note: Both services are now running")
     print("   Press Ctrl+C to stop all services")

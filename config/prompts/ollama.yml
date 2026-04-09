@@ -1,0 +1,43 @@
+prompts:
+  summarize_file:
+    model: llama3.2:latest
+    template: >
+      Summarize the following file in 250 words or fewer. It is not necessary to include all
+      facts and values, just a general overview of what the file contains.
+      File contents:
+      {text}
+    temperature: 0.1
+    max_tokens: 250
+
+  summarize_directory:
+    template: >
+      Summarize the purpose of this directory based on its contents in 250 characters or fewer. 
+      Attempt to discern any meaning from the path itself:
+      {uri}
+      Directory content:
+      {content}
+    temperature: 0.1
+    max_tokens: 250
+
+  parse_csv_tables:
+    timeout: 180
+    template: >
+      Divide the following csv into subtables, then return each table separately.
+      Remove any blank columns that were used for formatting.
+      Do NOT invent, duplicate, or omit any rows or columns.
+      Ensure that each row has the same number of columns as the headers.
+      Return ONLY the structured JSON — no extra commentary.
+
+      CSV blocks:
+      {csv_content}
+    temperature: 0.1
+
+  describe_image:
+    model: llava
+    timeout: 300
+    template: >
+      You are a technical writer. Describe this image in full detail, and try to enumerate all 
+      the objects, people, text, and other elements in the image. Be as descriptive as possible. 
+      If it is a map, describe all the rooms in the map, and their labels. If there is text in 
+      the image, transcribe it exactly as it appears.
+    temperature: 0.3
