@@ -528,15 +528,38 @@ class QdrantService:
         logger.info("query: got %d points from %s", len(results.points), collection_name)
         return [{"id": p.id, "score": p.score, **p.payload} for p in results.points]
 
-    def search(self, query: str, collection_name: str, limit: int = 5, point_type: str | None = None) -> List[QdrantVector]:
+    def search(
+        self,
+        query: str,
+        collection_name: str,
+        limit: int = 5,
+        point_type: str | list[str] | None = None,
+        uri_filter: list[str] | None = None,
+    ) -> List[QdrantVector]:
         """Search a collection and return ranked typed vector results."""
         collection_name = collection_name or settings.qdrant_collection_name
-        filter_conditions = {"type": point_type} if point_type else None
-        raw = self.query(query_text=query, collection_name=collection_name, limit=limit, filter_conditions=filter_conditions)
+
+        must: list = []
+        if isinstance(point_type, list):
+            must.append(models.FieldCondition(key="type", match=models.MatchAny(any=point_type)))
+        elif point_type:
+            must.append(models.FieldCondition(key="type", match=models.MatchValue(value=point_type)))
+        if uri_filter:
+            must.append(models.FieldCondition(key="uri", match=models.MatchAny(any=uri_filter)))
+        qdrant_filter = models.Filter(must=must) if must else None
+
+        query_vector = self.embedder.encode(query).tolist()
+        results = self.client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            using=self._get_vector_name(collection_name),
+            limit=limit,
+            query_filter=qdrant_filter,
+        )
         return [
-            _make_vector(i + 1, str(r["id"]), round(r["score"], 4),
-                         {k: v for k, v in r.items() if k not in ("id", "score")}, collection_name=collection_name)
-            for i, r in enumerate(raw)
+            _make_vector(i + 1, str(r.id), round(r.score, 4),
+                         r.payload or {}, collection_name=collection_name)
+            for i, r in enumerate(results.points)
         ]
 
     async def vector_search(

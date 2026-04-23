@@ -1,0 +1,36 @@
+text_analysis_task:
+  description: >
+    Original query: "{query}"
+
+    Below is a JSON array of text vectors. Each has:
+      "id"   — stable point identifier (use this as the DataPoint uri field)
+      "text" — the chunk or file text content
+
+    Plan steps (JSON):
+    {plan_steps_json}
+
+    For EACH vector, assess it against EACH plan step:
+      1. Decide whether the text is pertinent to the step.
+      2. Build a DataPoint:
+           uri       = the vector's "id" value (copy exactly, do not modify)
+           type      = "text"
+           pertinent = true if the text helps with this step, false otherwise
+           step      = the step's "info" field
+           reasoning = concise explanation of why the text is or is not pertinent
+           quote     = the full, verbatim "text" value for this vector
+                       (copy it exactly, do not truncate or paraphrase)
+
+    Produce one DataPoint per vector-step pair. Every vector must be assessed
+    against every step — do not skip any combination.
+
+    Text vectors:
+    {text_vectors_json}
+
+  expected_output: >
+    Raw JSON array of DataPoint objects — one per vector-step pair.
+    Each object must have exactly six keys:
+    "uri", "type", "pertinent" (boolean), "step", "reasoning", "quote".
+    The "uri" field must contain the vector's "id" value, copied exactly.
+    The "type" field must always be "text".
+    Output MUST start with '[' and end with ']'. No markdown fences.
+  agent: text_analyst

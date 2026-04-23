@@ -10,7 +10,7 @@ from src.agents.flows.rag import RAGFlow
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
-from src.agents.crews import ParsingCrew, FormatCrew
+from src.agents.crews import PlanningCrew, FormatCrew
 from src.agents.models.parsing import ParsedQuery
 from src.services.qdrant_service import qdrant_service
 from typing import List

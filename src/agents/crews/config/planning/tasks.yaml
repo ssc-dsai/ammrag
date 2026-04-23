@@ -1,0 +1,50 @@
+query_decomposition_task:
+  description: >
+    The user has asked: "{query}"
+
+    Break down what information is needed to fully answer this question.
+    For each distinct piece of information required, specify:
+
+      - info:  a concise description of the information needed
+      - query: the question or search phrase that would surface this information
+
+    Rules:
+    - Focus on WHAT information is needed, not HOW to retrieve it.
+    - Do NOT answer the question — only identify the information gaps.
+    - Do NOT infer information not present in the question.
+    - Prefer specific, focused information needs over one broad request.
+    - If the question is simple and one piece of information suffices, return one needed_info.
+  expected_output: >
+    Raw JSON only — no markdown fences, no explanation, no surrounding text.
+    A JSON object with keys "orig_query" (string) and "needed_info" (array).
+    Each needed_info object has exactly two string fields: "info" and "query".
+    Output MUST start with '{' and end with '}'.
+    Example:
+    {"orig_query":"How many employees are in each department and where are their offices?","needed_info":[{"info":"Employee headcount broken down by department","query":"employee count per department"},{"info":"Office locations for each department","query":"office locations by department"}]}
+  agent: query_expert
+
+sequencing_task:
+  description: >
+    The user has asked: "{query}"
+
+    You have been given a list of information needs that must be retrieved to answer it.
+    Your job is to reorder them so that information which is needed to refine or
+    contextualise a later lookup comes first.
+
+    Consider:
+    - Does finding one piece of information narrow down what to search for next?
+    - Are any items independent and can run in any order?
+    - Should broader context be gathered before specific details?
+
+    Return the same items in the optimal acquisition order. Do not add, remove, or
+    change any item — only reorder them. NEVER call multiple tools.
+  expected_output: >
+    Return exactly ONE JSON object.
+    All items must be inside the "needed_info" list.
+    Do NOT return multiple JSON objects.
+    Raw JSON only — no markdown fences, no explanation, no surrounding text.
+    The same JSON structure as the input: an object with keys "orig_query" (string)
+    and "needed_info" (array of objects with "info" and "query" fields), with items
+    reordered for optimal retrieval.
+    Output MUST start with '{' and end with '}'.
+  agent: sequencing_expert

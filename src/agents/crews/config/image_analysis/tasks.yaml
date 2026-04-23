@@ -1,0 +1,78 @@
+image_gate_task:
+  description: >
+    Original query: "{query}"
+
+    Below is a JSON array of image vectors. Each has an "id" (stable point identifier),
+    a "uri" (file path, for tool calls only), and "text"
+    (the stored description of the image).
+
+    Plan steps (JSON):
+    {plan_steps_json}
+
+    For each image, read its "text" field and determine whether it helps
+    with ANY of the plan steps. Do NOT call any tools.
+
+    For each image:
+      - If the text is not relevant to any step → mark it as skipped.
+      - If the text is relevant to at least one step → include it with:
+          "text_covered": list of steps the text addresses, each with
+            {"step_info": "...", "analysis": "how the text covers this step"}
+          "needs_tool": list of steps the text does NOT address, each with
+            {"step_info": "...", "step_query": "..."}
+
+    Images:
+    {image_vectors_json}
+
+  expected_output: >
+    Raw JSON object with two keys:
+      "to_process": array of images that passed the gate, each with:
+        { "id": "...", "uri": "...", "text_covered": [...], "needs_tool": [...] }
+      "skipped": array of ids that were dismissed
+    No markdown fences. Output MUST start with '{' and end with '}'.
+  agent: image_gate_agent
+
+
+image_analysis_task:
+  description: >
+    You have received the gate check results. For each image in "to_process":
+
+    1. For each step in "text_covered": create a DataPoint:
+         uri       = the image's "id" value (NOT the uri field)
+         type      = "image"
+         pertinent = true
+         step      = the step_info value
+         reasoning = the analysis from the gate check
+         quote     = the image's full "text" value (copy verbatim)
+
+    2. For each step in "needs_tool": call the image_analysis tool with:
+         uri   = the image's "uri" value (the file path)
+         query = the step's step_query value
+       If the tool returns non-empty text: create a DataPoint:
+         uri       = the image's "id" value (NOT the uri field)
+         type      = "image"
+         pertinent = true
+         step      = the step_info value
+         reasoning = the text returned by the tool
+         quote     = the image's full "text" value (copy verbatim)
+       If the tool returns empty: create a DataPoint:
+         uri       = the image's "id" value (NOT the uri field)
+         type      = "image"
+         pertinent = false
+         step      = the step_info value
+         reasoning = "Image analysis returned no relevant findings for this step."
+         quote     = the image's full "text" value (copy verbatim)
+
+    IMPORTANT: The DataPoint "uri" field must always be the image's "id" value,
+    never the "uri" field. The "uri" field is only used when calling the tool.
+
+    Process each image one at a time before moving to the next.
+
+  expected_output: >
+    Raw JSON array of DataPoint objects for ALL images (to_process only —
+    skipped images produce no DataPoints).
+    Each object must have exactly six keys: "uri", "type", "pertinent", "step",
+    "reasoning", "quote".
+    The "uri" field must contain the image's "id" value, not the file path.
+    The "type" field must always be "image".
+    Output MUST start with '[' and end with ']'. No markdown fences.
+  agent: image_analysis_agent

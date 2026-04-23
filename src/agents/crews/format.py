@@ -33,7 +33,6 @@ class FormatCrew:
     def answer_synthesis_task(self) -> Task:
         return Task(
             config=self.tasks_config["answer_synthesis_task"],  # type: ignore[index]
-            output_pydantic=QueryAnswer,
         )
 
     # ------------------------------------------------------------------- crew

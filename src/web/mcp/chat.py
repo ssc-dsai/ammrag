@@ -71,9 +71,9 @@ async def _call_tool(name: str, arguments: dict) -> str:
 
 SYSTEM_PROMPT = (
     "You are a document assistant. "
-    "Always follow this two-step process before answering:\n"
-    "1. Call file_tree_descriptions to find which directories and files are relevant.\n"
-    "2. Use these results to call query_documents to retrieve specific content chunks.\n"
+    "Always call query_documents before answering any question about documents. "
+    "Use synthesis=true when the user needs a formatted, cited answer. "
+    "Use synthesis=false when you need raw data points to reason over before answering. "
     "Never answer from memory or prior knowledge alone. "
     "If a result is used, include the link to the source in markdown. "
     "If an image is included, render the image using markdown."

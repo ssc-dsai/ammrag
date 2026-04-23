@@ -1,34 +1,43 @@
 answer_synthesis_task:
   description: >
-    Using the retrieved document chunks in "{vectors}", write a structured answer
-    to the user's original question: "{query}".
+    Using the research findings below, write a formatted markdown answer to the user's
+    original question: "{query}".
 
-    For every distinct aspect needed to fully answer the question, produce one entry
-    containing:
-      - discussion: a concise explanation of how this aspect answers part of the question
-      - quote: a verbatim or near-verbatim excerpt from the source document that
-               directly supports this aspect
-      - source: the URI or file path of the document the quote came from
-                (found in the "uri" field of each vector payload)
+    Findings:
+    {findings}
 
-    Rules:
-    - Use only information present in the provided vectors. Do not fabricate.
-    - If an aspect of the question cannot be answered from the available documents,
-      include an entry with discussion explaining the gap, an empty quote (""),
-      and source set to "not found".
-    - Each aspect must map to a different part of the question or a different
-      supporting document. Do not duplicate aspects.
+    Each finding includes a "uri" field that contains an opaque identifier for the source.
+    Use these identifiers exactly as given — they will be resolved to real links after
+    your response is processed. Do not decode, normalise, reformat, or alter them in any way.
+
+    Format rules (follow exactly):
+    - In the answer body, you may use tables, bullet points and markdown images as needed, 
+      but you must include an inline citation link for every claim that references a finding.
+      Try to make it look as aesthetically pleasing as possible while adhering to the citation requirements.
+    - For each point you make, append an inline citation link immediately after the claim:
+      [<n>](<identifier>)  where <identifier> is the exact "uri" value from that finding
+      and <n> is the citation number (starting at 1).
+    - If a finding's "uri" ends with an image extension (.png, .jpg, .jpeg, .gif, .webp, .bmp, .svg),
+      you mustdisplay the image AND a citation link on the same line:
+      ![<short label>](<identifier>) [<n>](<identifier>)
+    - After the main answer body, add a divider line (---) followed by a numbered
+      reference list, one entry per unique source:
+      <n>. [<identifier>](<identifier>)
+      where <n> is the citation number and <identifier> is the exact "uri" value from the findings.
+      DO NOT include blank lines in the reference list, and do not include any sources that were not 
+      cited in the answer body.
+    - Copy every "uri" value character-for-character — do not modify it in any way.
+    - Use only information present in the provided findings. Do not fabricate.
   expected_output: >
-    A JSON object with a single key "aspects" whose value is a list of objects.
-    Each object has exactly three string fields: "discussion", "quote", "source".
-    Example:
-    {
-      "aspects": [
-        {
-          "discussion": "The policy was updated in 2023 to require annual reviews.",
-          "quote": "All departmental policies must be reviewed on an annual basis effective January 2023.",
-          "source": "https://example.com/docs/policy-update-2023.pdf"
-        }
-      ]
-    }
+    A markdown answer with inline citation links and a numbered reference list.
+    The identifiers in the findings are opaque — copy them verbatim.
+    Example (id-a / id-b stand for whatever identifier values appear in the findings):
+
+    The office building at 101 Boul Roland-Therien has floor plans available. [1](id-b)
+
+    ![Floorplan - Floor 3](id-a) [2](id-a)
+
+    ---
+    1. [id-b](id-b)
+    2. [id-a](id-a)
   agent: answer_synthesizer

@@ -1,0 +1,8 @@
+structured_analyst:
+  role: >
+    Structured Data Analyst (Placeholder)
+  goal: >
+    Analyse structured file vectors against the query plan steps.
+    This capability is not yet implemented — return an empty result.
+  backstory: >
+    Placeholder agent for future structured data analysis capability.

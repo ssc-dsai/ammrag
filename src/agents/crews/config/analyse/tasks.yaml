@@ -1,0 +1,113 @@
+vector_refinement_task:
+  description: >
+    Original query: "{query}"
+
+    Evaluate the stored text of a single retrieved vector against each plan step.
+    Produce a structured refinement result — do NOT call any tools.
+
+    Vector details:
+      URI:  {uri}
+      Type: {is_image}  (true = image file, false = text chunk from a non-image file)
+      Stored text:
+      {text}
+
+    Plan steps (JSON):
+    {plan_steps_json}
+
+    ─────────────────────────────────────────
+    IF type is "true" — this is an IMAGE FILE
+    ─────────────────────────────────────────
+    Read the stored text and decide whether it helps with ANY plan step.
+
+    If it helps with NO steps at all:
+      → Output: {"type": "image", "skip": true}
+
+    If it helps with at least one step:
+      → For each step, classify it:
+          "text_covered": the stored text is sufficient to address this step.
+          "needs_tool":   the stored text does not address this step — visual
+                          inspection is needed.
+      → Output:
+        {
+          "type": "image",
+          "skip": false,
+          "text_covered": [
+            {"step_info": "<info field>", "step_query": "<query field>", "analysis": "<how the text addresses this step>"}
+          ],
+          "needs_tool": [
+            {"step_info": "<info field>", "step_query": "<query field>"}
+          ]
+        }
+
+    ──────────────────────────────────────────────────────────────────────
+    IF type is "false" — this is a TEXT CHUNK from a non-image document
+    ──────────────────────────────────────────────────────────────────────
+    For each plan step, decide whether the stored text is pertinent.
+
+    If pertinent to no steps:
+      → Output: {"type": "text", "skip": true}
+
+    If pertinent to at least one step:
+      → Output:
+        {
+          "type": "text",
+          "skip": false,
+          "relevant_steps": [
+            {
+              "step_info":  "<info field>",
+              "quote":      "<exact verbatim excerpt from stored text>",
+              "analysis":   "<how this quote helps with the step>"
+            }
+          ]
+        }
+
+  expected_output: >
+    A single raw JSON object matching one of the formats above.
+    No markdown fences, no explanation, no surrounding text.
+    Output MUST start with '{' and end with '}'.
+  agent: vector_refiner
+
+
+vector_analysis_task:
+  description: >
+    You have received a refinement result for the vector at URI: {uri}
+
+    Read the refinement result from the previous task's context.
+
+    If "skip" is true:
+      → Return [].
+
+    If "type" is "text":
+      → Convert each entry in "relevant_steps" directly into a data point:
+          "uri":      "{uri}"
+          "step":     the entry's "step_info"
+          "analysis": the entry's "analysis"
+          "quote":    the entry's "quote"
+      → Return the data points array. Do NOT call any tools.
+
+    If "type" is "image":
+      → For each entry in "text_covered":
+          Create a data point from the stored text analysis:
+            "uri":      "{uri}"
+            "step":     the entry's "step_info"
+            "analysis": the entry's "analysis"
+            "quote":    ""
+
+      → For each entry in "needs_tool":
+          Call the image_analysis tool with:
+            uri   = "{uri}"
+            query = the entry's "step_query"
+          If the tool returns non-empty text, create a data point:
+            "uri":      "{uri}"
+            "step":     the entry's "step_info"
+            "analysis": the text returned by the tool
+            "quote":    ""
+          If the tool returns empty, skip this step.
+
+      → Return all data points combined (text_covered + tool results).
+
+  expected_output: >
+    Raw JSON array of data point objects. Return [] if no steps are addressed.
+    Each object must have exactly four string keys: "uri", "step", "analysis", "quote".
+    Output MUST start with '[' and end with ']'. No markdown fences, no explanation.
+  agent: vector_analyst

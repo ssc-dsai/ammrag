@@ -7,7 +7,7 @@ from crewai.tools import BaseTool
 
 from src.services.qdrant_service import qdrant_service
 from src.models.qdrant_models import QdrantVector
-from typing import List
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +31,11 @@ class QdrantSearchTool(BaseTool):
         "chunk_index, and text excerpt. Always use this tool first when looking for information."
     )
     args_schema: Type[BaseModel] = _SearchInput
+    collection_name: Optional[str] = None
 
     def _run(self, query: str, limit: int = 5) -> List[QdrantVector]:
         try:
-            return qdrant_service.search(query, limit)
+            return qdrant_service.search(query, collection_name=self.collection_name, limit=limit)
         except Exception as exc:
             logger.error("QdrantSearchTool failed (query=%r): %s", query[:80], exc)
             raise Exception(f"Error in QdrantSearchTool: {exc}") from exc

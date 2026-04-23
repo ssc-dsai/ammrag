@@ -31,6 +31,10 @@ _QUIET_AT_WARNING = [
     "PIL",
     "filelock",
     "huggingface_hub",
+    # crewai internals — agent traces still show via crewai.crew / crewai.agent
+    "crewai.utilities",
+    "crewai.telemetry",
+    "crewai.memory",
 ]
 
 # Completely silenced (CRITICAL only — effectively no output)

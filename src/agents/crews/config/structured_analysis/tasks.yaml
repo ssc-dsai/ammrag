@@ -1,0 +1,7 @@
+structured_analysis_task:
+  description: >
+    Structured data analysis is not yet implemented.
+    Return an empty JSON array.
+  expected_output: >
+    []
+  agent: structured_analyst

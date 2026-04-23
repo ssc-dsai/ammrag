@@ -1,0 +1,23 @@
+execute_plan_task:
+  description: >
+    Retrieve the information needed to answer the user's question.
+
+    Original question: {orig_query}
+
+    Information to retrieve:
+    {plan}
+
+    For each item, use the most appropriate tool:
+    - Use document search (qdrant) for unstructured information: documents, policies,
+      reports, floor plans, images, descriptive or narrative text.
+    - Use database tools (postgres) for structured/tabular data: counts, statistics,
+      records, relational queries.
+
+    Compile all findings into a single comprehensive response. For every document or
+    image finding, include the exact source URI as returned by the tool — do not
+    alter URIs in any way.
+  expected_output: >
+    A comprehensive summary of all retrieved information, with every document finding
+    attributed to its exact source URI. Structured data results should be presented
+    as clear text summaries or tables.
+  agent: retrieval_agent
