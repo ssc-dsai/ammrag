@@ -152,7 +152,7 @@ def load_and_clean_csv(csv_path: str) -> str:
 
 def csv_to_markdown(csv_path: str, model: str | None = None) -> list[MarkdownTable]:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    model = model or os.getenv("OLLAMA_MODEL", "gpt-oss")
+    model = model or os.getenv("OLLAMA_MODEL", "gemma4:e4b")
     client = Client(host=host)
 
     cleaned_csv = load_and_clean_csv(csv_path)

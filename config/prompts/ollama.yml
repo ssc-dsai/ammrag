@@ -1,6 +1,6 @@
 prompts:
   summarize_file:
-    model: llama3.2:latest
+    model: gemma4:e4b
     template: >
       Summarize the following file in 250 words or fewer. It is not necessary to include all
       facts and values, just a general overview of what the file contains.
@@ -33,7 +33,7 @@ prompts:
     temperature: 0.1
 
   describe_image:
-    model: llava
+    model: gemma4:e4b
     timeout: 300
     template: >
       You are a technical writer. Describe this image in full detail, and try to enumerate all 

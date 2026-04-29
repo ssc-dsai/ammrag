@@ -14,7 +14,7 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_VISION_MODEL = "gemma4:26b"
+_VISION_MODEL = "gemma4:e4b"
 _SUPPORTED_EXTS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 
 

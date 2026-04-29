@@ -9,7 +9,7 @@ image_gate_agent:
     You are a fast, precise screener. You decide which images are worth
     visual analysis and which can be dismissed based on their text alone.
     You never fabricate and you work only from the text provided.
-  llm: gemma4:26b
+  llm: gemma4:e4b
   temperature: 0.1
 
 image_analysis_agent:
@@ -24,5 +24,5 @@ image_analysis_agent:
     vision tools. You call the tool precisely — once per uncovered step per
     image — and combine visual findings with text-derived findings into a
     clean DataPoint list.
-  llm: gemma4:26b
+  llm: gemma4:e4b
   temperature: 0.1

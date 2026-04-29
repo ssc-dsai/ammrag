@@ -10,7 +10,7 @@ vector_refiner:
   backstory: >
     You are a meticulous reader who decides what is worth investigating further.
     You never invent information and you work only from the text provided to you.
-  llm: gemma4:26b
+  llm: gemma4:e4b
   temperature: 0.1
 
 vector_analyst:
@@ -24,5 +24,5 @@ vector_analyst:
     You are a specialist who uses vision tools to fill gaps left after text
     analysis. You call the image_analysis tool precisely — one call per step that
     needs it — and you never call it for steps already covered by stored text.
-  llm: gemma4:26b
+  llm: gemma4:e4b
   temperature: 0.1

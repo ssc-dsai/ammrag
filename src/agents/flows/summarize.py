@@ -23,7 +23,7 @@ _TOKENS_PER_WORD = 0.75
 
 
 class SummarizeFlow(Flow):
-    model = "gpt-oss"
+    model = "gemma4:e4b"
 
     @start()
     def summarize(self):

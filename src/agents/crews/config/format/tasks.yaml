@@ -1,39 +1,45 @@
 answer_synthesis_task:
   description: >
-    Using the research findings below, write a formatted markdown answer to the user's
-    original question: "{query}".
+    Write a formatted markdown answer to: "{query}"
 
     Findings:
     {findings}
 
-    Each finding includes a "uri" field that contains an opaque identifier for the source.
-    Use these identifiers exactly as given — they will be resolved to real links after
-    your response is processed. Do not decode, normalise, reformat, or alter them in any way.
+    Each finding has a "uri" field — an opaque identifier that will be
+    resolved into a real link after your response is processed. Copy every
+    URI character-for-character; do not decode, normalise, or alter it.
 
-    Format rules (follow exactly):
-    - In the answer body, you may use tables, bullet points and markdown images as needed, 
-      but you must include an inline citation link for every claim that references a finding.
-      Try to make it look as aesthetically pleasing as possible while adhering to the citation requirements.
-    - For each point you make, append an inline citation link immediately after the claim:
-      [<n>](<identifier>)  where <identifier> is the exact "uri" value from that finding
-      and <n> is the citation number (starting at 1).
-    - If a finding's "uri" ends with an image extension (.png, .jpg, .jpeg, .gif, .webp, .bmp, .svg),
-      you mustdisplay the image AND a citation link on the same line:
-      ![<short label>](<identifier>) [<n>](<identifier>)
-    - After the main answer body, add a divider line (---) followed by a numbered
-      reference list, one entry per unique source:
-      <n>. [<identifier>](<identifier>)
-      where <n> is the citation number and <identifier> is the exact "uri" value from the findings.
-      DO NOT include blank lines in the reference list, and do not include any sources that were not 
-      cited in the answer body.
-    - Copy every "uri" value character-for-character — do not modify it in any way.
-    - Use only information present in the provided findings. Do not fabricate.
+    Citation numbering rules:
+    - Assign n=1 to the first URI you cite, n=2 to the second distinct URI, and so on.
+    - Every time you cite the same URI again, reuse its assigned number.
+    - Numbers must reflect order of first appearance across the whole document.
+
+    Body formatting rules:
+    - Use tables, bullet points, and markdown images where they aid clarity.
+    - Append an inline citation immediately after every claim:
+        [n](uri)
+    - For image URIs (ending in .png .jpg .jpeg .gif .webp .bmp .svg),
+      display the image AND cite it on the same line:
+        ![short label](uri) [n](uri)
+
+    Reference list rules:
+    - Add a divider (---) after the body, then list every cited URI once:
+        n. [uri](uri)
+    - Order entries by their citation number (order of first appearance).
+    - One entry per line — no blank lines between entries.
+    - Omit any URI that was not actually cited in the body.
+
+    Content rules:
+    - Use only information present in the findings.
+    - If the findings do not answer part of the question, say so — do not fabricate.
+
   expected_output: >
-    A markdown answer with inline citation links and a numbered reference list.
-    The identifiers in the findings are opaque — copy them verbatim.
-    Example (id-a / id-b stand for whatever identifier values appear in the findings):
+    A markdown answer with inline citations and a numbered reference list.
 
-    The office building at 101 Boul Roland-Therien has floor plans available. [1](id-b)
+    Example (id-a and id-b represent whatever URI values appear in the findings):
+
+    The office at 101 Boul Roland-Thérien has floor plans on file. [1](id-b)
+    The third floor layout is shown below. [1](id-b)
 
     ![Floorplan - Floor 3](id-a) [2](id-a)
 

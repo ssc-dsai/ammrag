@@ -42,24 +42,8 @@ class PlanningCrew:
             verbose=True,
         )
 
-    @agent
-    def sequencing_expert(self) -> Agent:
-        model = self.agents_config["sequencing_expert"].get("llm")  # type: ignore[index]
-        return Agent(
-            config=self.agents_config["sequencing_expert"],  # type: ignore[index]
-            llm=get_llm(model=model, think=False),
-            max_iter=2,
-            verbose=True,
-        )
-
     @task
     def query_decomposition_task(self) -> Task:
-        return Task(
-            config=self.tasks_config["query_decomposition_task"],  # type: ignore[index]
-        )
-
-    @task
-    def sequencing_task(self) -> Task:
         def _set_pydantic(output):
             try:
                 raw = output.raw or ""
@@ -70,7 +54,7 @@ class PlanningCrew:
                 pass
 
         return Task(
-            config=self.tasks_config["sequencing_task"],  # type: ignore[index]
+            config=self.tasks_config["query_decomposition_task"],  # type: ignore[index]
             result_as_answer=True,
             callback=_set_pydantic,
         )

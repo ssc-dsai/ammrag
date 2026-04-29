@@ -21,7 +21,7 @@ def _run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
-def _make_response(response="", done=True, thinking=None, done_reason=None, eval_count=None, model="gpt-oss:latest"):
+def _make_response(response="", done=True, thinking=None, done_reason=None, eval_count=None, model="gemma4:e4b"):
     """Build a mock ollama.GenerateResponse."""
     resp = MagicMock(spec=ollama.GenerateResponse)
     resp.response = response
@@ -54,7 +54,7 @@ def _mock_client(response=None, raises=None):
 
 @pytest.fixture
 def service() -> OllamaService:
-    svc = OllamaService(base_url="http://localhost:11434", model="gpt-oss:latest", timeout=30)
+    svc = OllamaService(base_url="http://localhost:11434", model="gemma4:e4b", timeout=30)
     svc.retries = 0
     return svc
 

@@ -23,7 +23,7 @@ load_dotenv()
 # ─── Configuration (mirrors AMMRAG .env variables) ───────────────────────────
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = "gpt-oss:latest"
+OLLAMA_MODEL = "gemma4:e4b"
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
 

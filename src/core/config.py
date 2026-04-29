@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
     # Ollama Configuration
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "gpt-oss:latest")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "gemma4:e4b")
     ollama_timeout: int = int(os.getenv("OLLAMA_TIMEOUT", 120))  # seconds
     ollama_temperature: float = float(os.getenv("OLLAMA_TEMPERATURE", 0.3))
     ollama_retries: int = int(os.getenv("OLLAMA_RETRIES", 3))
