@@ -2,6 +2,10 @@ text_analysis_task:
   description: >
     Original query: "{query}"
 
+    Temporal constraint (may be "none"): {temporal_constraint}
+
+    Intent flags (may be "none"): {intent_flags}
+
     Below is a JSON array of text vectors. Each has:
       "id"   — stable point identifier (use this as the DataPoint uri field)
       "text" — the chunk or file text content
@@ -11,6 +15,8 @@ text_analysis_task:
 
     For EACH vector, assess it against EACH plan step:
       1. Decide whether the text is pertinent to the step.
+         If a temporal constraint is provided and the text contains a date,
+         set pertinent=false if the date falls outside the constraint range.
       2. Build a DataPoint:
            uri       = the vector's "id" value (copy exactly, do not modify)
            type      = "text"
@@ -19,6 +25,11 @@ text_analysis_task:
            reasoning = concise explanation of why the text is or is not pertinent
            quote     = the full, verbatim "text" value for this vector
                        (copy it exactly, do not truncate or paraphrase)
+           value     = if intent_flags contains "structured" or "temporal",
+                       extract the primary numeric quantity (count, amount, year)
+                       from the text as a float; null if none found
+           date      = if a date is present in the text, extract it as ISO 8601
+                       (YYYY-MM-DD); null if none found
 
     Produce one DataPoint per vector-step pair. Every vector must be assessed
     against every step — do not skip any combination.
@@ -28,8 +39,9 @@ text_analysis_task:
 
   expected_output: >
     Raw JSON array of DataPoint objects — one per vector-step pair.
-    Each object must have exactly six keys:
-    "uri", "type", "pertinent" (boolean), "step", "reasoning", "quote".
+    Each object must have exactly eight keys:
+    "uri", "type", "pertinent" (boolean), "step", "reasoning", "quote",
+    "value" (number or null), "date" (string ISO 8601 or null).
     The "uri" field must contain the vector's "id" value, copied exactly.
     The "type" field must always be "text".
     Output MUST start with '[' and end with ']'. No markdown fences.

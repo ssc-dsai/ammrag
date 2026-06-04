@@ -1,0 +1,105 @@
+{
+  "has_images": true,
+  "has_structured": false,
+  "uri_segments": [
+    "test",
+    "test.txt",
+    "100 Saint Joseph Road",
+    "floorplans",
+    "Floorplan Cabling - Floor 3.pdf",
+    "photos",
+    "IMG_0199.JPG",
+    "IMG_0201.JPG",
+    "101 Boul Roland-Therien",
+    "Floorplan - Floor 3.png",
+    "Floorplan  - Floor 4.png",
+    "20241017_120842_resized.jpg",
+    "20241017_120745_resized.jpg",
+    "IMG_0196.JPG",
+    "IMG_0205.JPG",
+    "IMG_0198.JPG",
+    "IMG_0206.JPG",
+    "IMG_0197.JPG",
+    "20241017_120823_resized.jpg",
+    "20241017_120846_resized.jpg",
+    "20241017_120932_resized.jpg",
+    "20241017_120741_resized.jpg",
+    "20241017_120852_resized.jpg",
+    "IMG_0207.JPG",
+    "20241017_120924_resized.jpg",
+    "20241017_120857_resized.jpg",
+    "IMG_0200.JPG",
+    "20241017_120905_resized.jpg",
+    "IMG_0195.JPG",
+    "configuration",
+    "ALMAQC43664SWC1DEC.txt",
+    "LNGLQC043090XSWC0611-E.txt",
+    "General Documentation",
+    "WBA FAQ Jul 2023.pdf",
+    "surveys"
+  ],
+  "inferred_facets": {
+    "Addresses": [
+      {
+        "value": "100 Saint Joseph Road",
+        "source": "inferred"
+      },
+      {
+        "value": "101 Boul Roland-Therien",
+        "source": "inferred"
+      }
+    ],
+    "Document Types": [
+      {
+        "value": "floorplans",
+        "source": "inferred"
+      },
+      {
+        "value": "photos",
+        "source": "inferred"
+      },
+      {
+        "value": "configuration",
+        "source": "inferred"
+      },
+      {
+        "value": "checklists",
+        "source": "inferred"
+      },
+      {
+        "value": "inventories",
+        "source": "inferred"
+      }
+    ],
+    "Dates": [
+      {
+        "value": "20241017",
+        "source": "inferred"
+      }
+    ],
+    "Projects": [
+      {
+        "value": "HEART CANADA",
+        "source": "inferred"
+      }
+    ]
+  },
+  "directory_summaries": [
+    "This folder holds floor\u2011plan images and notes for 100\u202fSaint\u202fJoseph\u202fRoad, detailing multi\u2011floor layouts, room labels (A\u2011I, basement, 1st, 4th floor), and architectural features for reference or documen",
+    "Directory holds floor plans for the office building at 101\u202fBoul Roland\u2011Therien, detailing reception, conference rooms, offices, kitchen, bathroom, and hallway. It serves as a reference for space plann",
+    "Directory holds photographic records of 100\u202fSaint\u202fJoseph\u202fRoad\u2019s interior\u2014server rooms, industrial equipment, storage areas, and lobby\u2014used for facility documentation, maintenance, inventory, and compl",
+    "**Purpose:**  \nA local file\u2011share for the 101\u202fBoul\u202fRoland\u2011Therien building, holding photos of infrastructure, floor plans, and a Cisco Catalyst\u202f9500 config for maintenance, inspection, space planning,",
+    "Test directory for a file\u2011sharing service; it holds a minimal \u201chello world\u201d text file used to verify that clients can read and display plain text. It serves as a simple sanity check for the server and",
+    "Test folder on local file share, holds a minimal \u201cHello World\u201d text file used as a simple demo or placeholder for file sharing or programming tutorials.",
+    "Directory holds site\u2011visit checklists and asset inventories for the HEART CANADA building at 101\u202fBoul Roland\u2011Therien, detailing security, equipment, and procedures.",
+    "This folder stores floor\u2011plan images, interior photos, and network config files for 100\u202fSaint\u202fJoseph\u202fRoad, serving as a central reference for facility layout, maintenance, inventory, compliance, and d",
+    "Photos documenting 101\u202fBoul\u202fRoland\u2011Therien\u2019s infrastructure\u2014server rooms, construction, elevators, HVAC\u2014used for maintenance, inspection, and project tracking.",
+    "Directory holds site\u2011visit checklists and asset inventories for the HEART CANADA building at 101\u202fBoul Roland\u2011Therien, detailing security, equipment, and procedures. The path name reflects the building",
+    "Directory holds a Cisco Catalyst\u202f9500 configuration for network, security, and management at 101\u202fBoul\u202fRoland\u2011Therien. It\u2019s used for device setup, backup, and deployment.",
+    "Directory holds configuration files for network equipment (e.g., Cisco Catalyst 9200). It stores IOS\u202fXE switch settings, security, routing, and user credentials for devices located at 100 Saint Joseph",
+    "Directory holds site\u2011survey checklists for telecom/IT installation at 100\u202fSaint\u202fJoseph\u202fRoad, covering WBA intake, access, equipment, network, safety, and environmental data. Path indicates the site ad",
+    "General docs for WBA Wi\u2011Fi deployment in government buildings\u2014implementation guide, FAQs, roles (LAN OPI/Lead), responsibilities, and supporting resources."
+  ],
+  "computed_at": "2026-04-29T20:27:44.473185+00:00",
+  "collection_version": -1
+}

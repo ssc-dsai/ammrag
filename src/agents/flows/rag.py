@@ -18,12 +18,17 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 from crewai.flow.flow import Flow, listen, start
 from typing import List
 
+from src.agents.aggregator import aggregate
+from src.agents.classifier import classify_query, is_simple_query
 from src.agents.crews import (
     PlanningCrew, FormatCrew,
     TextAnalysisCrew, StructuredAnalysisCrew,
 )
 from src.agents.models.analysis import AnalysisResult, DataPoint
+from src.agents.models.intent import QueryIntent, TemporalConstraint
 from src.agents.models.planning import QueryPlan, InfoNeed
+from src.agents.schema_service import get_or_build_schema
+from src.agents.simple_rag import simple_rag
 from src.agents.utils import parse_crew_output
 from src.models.qdrant_models import FileVector, QdrantVector
 from src.services.qdrant_service import qdrant_service
@@ -73,7 +78,8 @@ def _clean_markdown(md: str) -> str:
 
 
 def _analyse_each_vector(
-    vecs: List[QdrantVector], query: str, plan_steps_json: str
+    vecs: List[QdrantVector], query: str, plan_steps_json: str,
+    intent_flags: str = "navigational", temporal_constraint: str = "none",
 ) -> list[dict]:
     """Run TextAnalysisCrew on each vector individually; return a per-vector markdown report."""
     reports = []
@@ -84,6 +90,8 @@ def _analyse_each_vector(
             "query": query,
             "plan_steps_json": plan_steps_json,
             "text_vectors_json": vec_json,
+            "intent_flags": intent_flags,
+            "temporal_constraint": temporal_constraint,
         })
         report = out.raw or ""
         logger.info("Vector %s: report is %d chars", v.point_id, len(report))
@@ -106,10 +114,55 @@ class RAGFlow(Flow):
     def plan_query(self):
         self._emit("Planning retrieval tasks", 1, 4)
         query = self.state["query"]
+        collection_name = self.state.get("collection_name")
         logger.info("--- Step 1: plan_query ---")
         logger.info("Input query: %s", query)
 
-        crew_output = PlanningCrew().crew().kickoff(inputs={"query": query})
+        # Load (or build) collection schema
+        schema = get_or_build_schema(collection_name) if collection_name else None
+        self.state["schema"] = schema
+
+        # Classify query intent and extract temporal constraint
+        intent, temporal = classify_query(query)
+        logger.info("Intent: %s  Temporal: %s", intent, temporal)
+        self.state["intent"] = intent
+        self.state["temporal"] = temporal
+
+        # Simple path: single navigational lookup — skip the full pipeline
+        if is_simple_query(intent, query) and collection_name:
+            logger.info("Simple path triggered for query: %s", query)
+            result = simple_rag(query, collection_name)
+            if result:
+                logger.info("Simple path returned answer (%d chars)", len(result))
+                self.state["answer"] = result
+                self.state["simple_path"] = True
+                return
+            logger.info("Simple path returned None — falling through to full pipeline")
+
+        self.state["simple_path"] = False
+
+        # Build facets string for planner
+        facets_json = "none"
+        if schema and schema.inferred_facets:
+            import json as _json
+            facets_json = _json.dumps({
+                k: [fv.value for fv in vs]
+                for k, vs in schema.inferred_facets.items()
+            })
+        temporal_str = "none"
+        if temporal:
+            parts = []
+            if temporal.after:
+                parts.append(f"after: {temporal.after}")
+            if temporal.before:
+                parts.append(f"before: {temporal.before}")
+            temporal_str = "; ".join(parts) or "none"
+
+        crew_output = PlanningCrew().crew().kickoff(inputs={
+            "query": query,
+            "facets_json": facets_json,
+            "temporal_constraint": temporal_str,
+        })
         plan = parse_crew_output(
             crew_output,
             QueryPlan,
@@ -127,13 +180,19 @@ class RAGFlow(Flow):
     # ------------------------------------------------------------------ stage 2
     @listen(plan_query)
     def retrieve(self):
+        if self.state.get("simple_path"):
+            return  # answer already set
         self._emit("Retrieving relevant vectors", 2, 4)
         logger.info("--- Step 2: retrieve ---")
         plan: QueryPlan = self.state["plan"]
         collection_name = self.state.get("collection_name")
 
         # Filter search: identify relevant files and classify them by type.
-        uris: set[str] = set()
+        # Only include URIs scoring above the threshold — low-scoring results
+        # often belong to unrelated documents that share the same directory.
+        _URI_SCORE_THRESHOLD = 0.35
+        file_uris: set[str] = set()   # specific file URIs → safe for chunk filtering
+        dir_uris: set[str] = set()    # directory URIs → used only if no file URIs found
         image_vectors: list[FileVector] = []
         structured_vectors: list[FileVector] = []
         seen_uris: set[str] = set()
@@ -147,34 +206,42 @@ class RAGFlow(Flow):
             )
             for r in results:
                 uri = r.get_uri()
-                if not uri:
+                if not uri or r.score < _URI_SCORE_THRESHOLD:
                     continue
-                uris.add(uri)
-                if isinstance(r, FileVector) and uri not in seen_uris:
-                    seen_uris.add(uri)
-                    if r.payload.image:
-                        image_vectors.append(r)
-                    elif r.payload.structured:
-                        structured_vectors.append(r)
-        uri_list = sorted(uris)
+                if isinstance(r, FileVector):
+                    file_uris.add(uri)
+                    if uri not in seen_uris:
+                        seen_uris.add(uri)
+                        if r.payload.image:
+                            image_vectors.append(r)
+                        elif r.payload.structured:
+                            structured_vectors.append(r)
+                else:
+                    dir_uris.add(uri)
+
+        # Use file URIs as the Pass 2 filter (precise). Fall back to directory
+        # URIs only when no files were found above the threshold.
+        uri_list = sorted(file_uris or dir_uris)
         logger.info(
-            "URI filters: %d total, %d image, %d structured",
-            len(uri_list), len(image_vectors), len(structured_vectors),
+            "URI filters: %d file, %d dir, %d image, %d structured",
+            len(file_uris), len(dir_uris), len(image_vectors), len(structured_vectors),
         )
 
-        # Content search: retrieve vectors within the filtered URI set.
+        # Content search: chunks only — file/directory vectors are already captured
+        # above in image_vectors and structured_vectors, so we skip them here.
         try:
             vectors: List[QdrantVector] = []
             for plan_step in plan.needed_info:
-                logger.info("Searching: %s", plan_step.query)
+                logger.info("Chunk search: %s", plan_step.query)
                 search_results = qdrant_service.search(
                     plan_step.query,
                     collection_name=collection_name,
                     uri_filter=uri_list or None,
+                    point_type=["chunk"],
                 )
-                logger.info("  -> %d results", len(search_results))
+                logger.info("  -> %d chunk results", len(search_results))
                 vectors.extend(search_results)
-            logger.info("Total vectors retrieved: %d", len(vectors))
+            logger.info("Total chunk vectors retrieved: %d", len(vectors))
         except Exception as exc:
             logger.exception("retrieve failed: %s", exc)
             raise Exception(f"An error occurred while running the crew: {exc}") from exc
@@ -186,10 +253,15 @@ class RAGFlow(Flow):
 
     @listen(retrieve)
     def analyse_results(self):
+        if self.state.get("simple_path"):
+            return  # answer already set
+
         self._emit("Analysing findings", 3, 4)
         logger.info("--- Step 3: analyse_results ---")
         query: str = self.state["query"]
         plan: QueryPlan = self.state["plan"]
+        intent: QueryIntent = self.state.get("intent") or ["navigational"]
+        temporal: TemporalConstraint | None = self.state.get("temporal")
         text_vecs: List[QdrantVector] = self.state.get("vectors") or []
         image_vecs: List[FileVector] = self.state.get("image_vectors") or []
         structured_vecs: List[FileVector] = self.state.get("structured_vectors") or []
@@ -199,6 +271,16 @@ class RAGFlow(Flow):
             {"index": i, "info": step.info, "query": step.query}
             for i, step in enumerate(plan.needed_info, 1)
         ])
+
+        intent_flags = " ".join(intent)
+        temporal_str = "none"
+        if temporal:
+            parts = []
+            if temporal.after:
+                parts.append(f"after: {temporal.after}")
+            if temporal.before:
+                parts.append(f"before: {temporal.before}")
+            temporal_str = "; ".join(parts) or "none"
 
         # Build point_id → uri lookup so LLMs never touch URIs during analysis.
         pid_to_uri: dict[str, str] = {}
@@ -211,27 +293,42 @@ class RAGFlow(Flow):
                 raw = raw.strip()
                 if "```" in raw:
                     raw = raw.split("```")[-2].lstrip("json").strip()
-                return [DataPoint(**dp) for dp in json.loads(raw)]
+                items = json.loads(raw)
             except Exception as exc:
-                logger.warning("%s DataPoint parse failed: %s", label, exc)
+                logger.warning("%s JSON parse failed: %s", label, exc)
                 return []
-
-        self.state["vector_reports"] = _analyse_each_vector(list(image_vecs) + list(text_vecs), query, plan_steps_json)
+            points: list[DataPoint] = []
+            for i, dp in enumerate(items):
+                try:
+                    points.append(DataPoint(**dp))
+                except Exception as exc:
+                    logger.warning("%s DataPoint[%d] invalid: %s — skipping", label, i, exc)
+            return points
 
         all_data_points: list[DataPoint] = []
 
-        # Text analysis: image vectors fall back to their stored text descriptions,
-        # so we combine them with plain text vectors and run one TextAnalysisCrew call.
-        all_text = (
-            [{"id": v.point_id, "text": v.get_payload_field("text") or ""} for v in image_vecs]
-            + [{"id": v.point_id, "text": v.get_payload_field("text") or ""} for v in text_vecs]
-        )
+        # Build deduplicated text batch: image descriptions first, then text-only
+        # chunks from Pass 2. Exclude any Pass 2 vector whose point_id is already
+        # covered by image_vecs or structured_vecs (Pass 2 often re-returns them).
+        classified_pids: set[str] = {v.point_id for v in list(image_vecs) + list(structured_vecs)}
+        text_only_vecs = [v for v in text_vecs if v.point_id not in classified_pids]
+
+        seen_pids: set[str] = set()
+        all_text: list[dict] = []
+        for v in list(image_vecs) + list(text_only_vecs):
+            if v.point_id not in seen_pids:
+                seen_pids.add(v.point_id)
+                all_text.append({"id": v.point_id, "text": v.get_payload_field("text") or ""})
+
         if all_text:
-            logger.info("Running TextAnalysisCrew on %d vectors (%d from images, %d plain text)...", len(all_text), len(image_vecs), len(text_vecs))
+            logger.info("Running TextAnalysisCrew on %d vectors (%d image, %d text-only)...",
+                        len(all_text), len(image_vecs), len(text_only_vecs))
             out = TextAnalysisCrew().crew().kickoff(inputs={
                 "query": query,
                 "plan_steps_json": plan_steps_json,
                 "text_vectors_json": json.dumps(all_text),
+                "intent_flags": intent_flags,
+                "temporal_constraint": temporal_str,
             })
             points = _parse(out.raw or "", "TextAnalysisCrew")  # type: ignore[union-attr]
             logger.info("TextAnalysisCrew returned %d data points", len(points))
@@ -253,6 +350,13 @@ class RAGFlow(Flow):
             logger.info("No structured vectors — skipping StructuredAnalysisCrew")
 
         logger.info("Analysis complete — %d total data points", len(all_data_points))
+
+        # Numeric aggregation
+        agg = aggregate(all_data_points, intent, query)
+        if agg:
+            logger.info("Aggregation: %s", agg.summary())
+        self.state["aggregation"] = agg
+
         result = AnalysisResult(data_points=all_data_points)
         self.state["analysis"] = result
         self.state["pid_to_uri"] = pid_to_uri
@@ -260,26 +364,36 @@ class RAGFlow(Flow):
 
     @listen(analyse_results)
     def format_answer(self):
+        if self.state.get("simple_path"):
+            return self.state.get("answer")  # already formatted
         if not self.state.get("synthesis"):
             return None
         self._emit("Formatting answer", 4, 4)
-        logger.info("--- Step 5: format_answer ---")
+        logger.info("--- Step 4: format_answer ---")
         query: str = self.state["query"]
         analysis: AnalysisResult = self.state["analysis"]
+        pid_to_uri: dict[str, str] = self.state.get("pid_to_uri") or {}
+
+        # Swap point_ids to real URIs before building findings — FormatCrew must
+        # see actual URLs so it can cite them correctly. Doing this after FormatCrew
+        # causes hallucinated placeholders because UUIDs look meaningless to the LLM.
+        def _resolve(pid: str) -> str:
+            return pid_to_uri.get(pid, pid)
 
         findings = "\n\n".join(
-            f"uri: {dp.uri}\nstep: {dp.step}\nquote: {dp.quote}\nreasoning: {dp.reasoning}"
+            f"uri: {_resolve(dp.uri)}\nstep: {dp.step}\nquote: {dp.quote}\nreasoning: {dp.reasoning}"
             for dp in analysis.data_points
             if dp.pertinent
         )
 
+        # Prepend aggregated numeric result if available
+        agg = self.state.get("aggregation")
+        if agg:
+            agg_line = f"Computed result: {agg.summary()}\n\n"
+            findings = agg_line + findings
+
         crew_output = FormatCrew().crew().kickoff(inputs={"query": query, "findings": findings})  # type: ignore[union-attr]
         markdown = _clean_markdown(crew_output.raw or "")
-
-        # Swap point_ids back to real URIs now that all LLM processing is complete.
-        pid_to_uri: dict[str, str] = self.state.get("pid_to_uri") or {}
-        for pid, uri in pid_to_uri.items():
-            markdown = markdown.replace(pid, uri)
 
         logger.info("FormatCrew complete: %d chars", len(markdown))
         self.state["answer"] = markdown

@@ -2,11 +2,23 @@ query_decomposition_task:
   description: >
     The user has asked: "{query}"
 
+    Collection metadata:
+    - Known facets (may be empty): {facets_json}
+    - Temporal constraint (may be "none"): {temporal_constraint}
+
     Break down what information is needed to fully answer this question.
     For each distinct piece of information required, specify:
 
       - info:  a concise description of the information needed
       - query: the question or search phrase that would surface this information
+
+    If known facets are provided and the question is compound (e.g. "across all offices"),
+    generate one needed_info item per facet value rather than one broad item.
+    If facets are empty and the question is compound, generate a single discovery
+    needed_info first (e.g. "list all offices") before any per-entity items.
+
+    If a temporal constraint is provided, embed the date bound explicitly in each
+    relevant query string (e.g. "invoices after 2024-01-01").
 
     Then order the items so that information which is needed to refine or
     contextualise a later lookup comes first. Consider:
