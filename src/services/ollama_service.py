@@ -310,7 +310,7 @@ def get_prompt_config(name: str, **kwargs) -> dict:
     """Return a dict of generate() kwargs for the named prompt.
 
     Includes rendered ``prompt``, ``temperature``, ``max_tokens`` (if set), and
-    ``model`` when explicitly specified in the YAML (e.g. ``model: gemma4:e4b``).
+    ``model`` when explicitly specified in the YAML (e.g. ``model: gemma4:12B``).
     Omitting ``model`` or setting it to ``"default"`` uses the service default.
     """
     cfg = _PROMPTS[name]

@@ -43,7 +43,7 @@ def classify_query(query: str) -> tuple[QueryIntent, TemporalConstraint | None]:
     try:
         client = get_openai_client()
         response = client.chat.completions.create(
-            model="gemma4:e4b",
+            model="gemma4:12B",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
         )

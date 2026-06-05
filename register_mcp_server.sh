@@ -19,7 +19,7 @@ SERVER_URL="${CANCHAT_SERVER_URL:-http://localhost:8080}"
 TOKEN="${CANCHAT_ADMIN_TOKEN:-}"
 DRY_RUN=false
 
-MCP_URL="http://172.17.0.3:8001/mcp/"
+MCP_URL="http://172.22.0.2:8001/mcp/"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

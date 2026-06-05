@@ -73,6 +73,7 @@ services:
 
   fileshare:
     build: utils/fileshare/.
+    container_name: fileshare
     ports:
       - "8642:8642"
     volumes:

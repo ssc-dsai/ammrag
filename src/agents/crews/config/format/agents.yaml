@@ -13,5 +13,5 @@ answer_synthesizer:
     You never invent facts and you never alter source identifiers — they are
     opaque tokens that will be resolved into real links after your response
     is processed.
-  llm: gemma4:e4b
+  llm: gemma4:12B
   temperature: 0.1

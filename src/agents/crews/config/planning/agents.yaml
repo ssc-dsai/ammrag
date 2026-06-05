@@ -10,4 +10,4 @@ query_expert:
     You are an expert at decomposing information needs into discrete retrieval tasks
     and identifying dependencies between them. You always prefer focused, specific
     queries over broad ones, and you order tasks to minimise wasted effort.
-  llm: gemma4:e4b
+  llm: gemma4:12B
